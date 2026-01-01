@@ -10,18 +10,46 @@ use Inertia\Inertia;
 
 class PurchaseController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
+        // Filters
+        $filters = [
+            'search' => $request->input('search'),
+            'supplier' => $request->input('supplier'),
+            'status' => $request->input('status'),
+            'date_from' => $request->input('date_from'),
+            'date_to' => $request->input('date_to'),
+        ];
+
         $purchases = Purchase::query()
-            ->with('items')
+            ->with('items.product')
             ->withSum('items as total_quantity', 'quantity')
-            ->withSum('items as total_percent', 'total_price')
+            ->withSum('items as total_price_sum', 'total_price')
+            ->when($filters['search'], function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('reference', 'like', "%{$search}%")
+                      ->orWhere('supplier_name', 'like', "%{$search}%");
+                });
+            })
+            ->when($filters['supplier'], function ($query, $supplier) {
+                $query->where('supplier_name', 'like', "%{$supplier}%");
+            })
+            ->when($filters['status'], function ($query, $status) {
+                $query->where('status', $status);
+            })
+            ->when($filters['date_from'], function ($query, $date) {
+                $query->whereDate('purchase_date', '>=', $date);
+            })
+            ->when($filters['date_to'], function ($query, $date) {
+                $query->whereDate('purchase_date', '<=', $date);
+            })
             ->orderByDesc('created_at')
             ->paginate(10)
             ->withQueryString();
 
         return Inertia::render('Dashboard/Purchase/Index', [
             'purchases' => $purchases,
+            'filters' => $filters,
         ]);
     }
 
@@ -68,7 +96,11 @@ class PurchaseController extends Controller
             ]);
 
             foreach ($request->items as $item) {
+                // Find product by barcode to get product_id
+                $product = \App\Models\Product::where('barcode', $item['barcode'])->first();
+
                 $purchase->items()->create([
+                    'product_id' => $product?->id,
                     'barcode' => $item['barcode'],
                     'description' => $item['description'] ?? null,
                     'quantity' => $item['quantity'],
@@ -99,7 +131,7 @@ class PurchaseController extends Controller
         $products = \App\Models\Product::all();
 
         return Inertia::render('Dashboard/Purchase/Edit', [
-            'purchase' => $purchase->load('items'),
+            'purchase' => $purchase->load('items.product'),
             'products' => $products,
         ]);
     }
@@ -139,7 +171,11 @@ class PurchaseController extends Controller
 
             // simpan ulang item
             foreach ($request->items as $item) {
+                // Find product by barcode to get product_id
+                $product = \App\Models\Product::where('barcode', $item['barcode'])->first();
+
                 $purchase->items()->create([
+                    'product_id' => $product?->id,
                     'barcode' => $item['barcode'],
                     'description' => $item['description'] ?? null,
                     'quantity' => $item['quantity'],

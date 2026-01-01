@@ -3,30 +3,46 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 const ThemeSwitcher = createContext();
 
 export const ThemeSwitcherProvider = ({ children }) => {
-    // define state darkMode
-    const [darkMode, setDarkMode] = useState(
-        localStorage.getItem('darkMode') === 'true'
-    )
+    // Initialize darkMode from localStorage or system preference
+    const [darkMode, setDarkMode] = useState(() => {
+        const stored = localStorage.getItem('darkMode');
+        if (stored !== null) {
+            return stored === 'true';
+        }
+        // Check system preference
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    });
 
     useEffect(() => {
         const root = document.documentElement;
-        const toggleTransition = () => {
-            root.classList.add('no-transition');
-            setTimeout(() => {
-                root.classList.remove('no-transition');
-            }, 0);
-        };
 
-        toggleTransition();
-
-        if (darkMode)
+        // Apply dark mode class to html element for Tailwind
+        if (darkMode) {
+            root.classList.add('dark');
             document.body.classList.add('dark');
-        else
+        } else {
+            root.classList.remove('dark');
             document.body.classList.remove('dark');
+        }
 
-        // set darkMode in localstorage
+        // Save to localStorage
         localStorage.setItem('darkMode', darkMode);
     }, [darkMode]);
+
+    // Listen for system theme changes
+    useEffect(() => {
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const handleChange = (e) => {
+            // Only auto-switch if user hasn't manually set preference
+            const stored = localStorage.getItem('darkMode');
+            if (stored === null) {
+                setDarkMode(e.matches);
+            }
+        };
+
+        mediaQuery.addEventListener('change', handleChange);
+        return () => mediaQuery.removeEventListener('change', handleChange);
+    }, []);
 
     const themeSwitcher = () => setDarkMode(!darkMode);
 

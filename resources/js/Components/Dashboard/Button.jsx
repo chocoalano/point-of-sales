@@ -3,69 +3,101 @@ import React from 'react'
 import { useForm } from '@inertiajs/react';
 import Swal from 'sweetalert2'
 
-export default function Button({ className, icon, label, type, href, added, url, id, ...props }) {
+export default function Button({ className, icon, label, type, href, added, url, id, variant = 'primary', size = 'md', ...props }) {
 
     const { delete: destroy } = useForm();
 
     const deleteData = async (url) => {
         Swal.fire({
-            title: 'Apakah kamu yakin ingin menghapus data ini ?',
+            title: 'Apakah kamu yakin?',
             text: "Data yang dihapus tidak dapat dikembalikan!",
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
-            confirmButtonText: 'Ya, tolong hapus!',
-            cancelButtonText: 'Tidak'
+            confirmButtonColor: '#3b82f6',
+            cancelButtonColor: '#ef4444',
+            confirmButtonText: 'Ya, hapus!',
+            cancelButtonText: 'Batal',
+            customClass: {
+                popup: 'dark:bg-slate-900 dark:text-slate-100',
+                title: 'dark:text-slate-100',
+                htmlContainer: 'dark:text-slate-400',
+            }
         }).then((result) => {
             if (result.isConfirmed) {
                 destroy(url)
 
                 Swal.fire({
-                    title: 'Success!',
+                    title: 'Berhasil!',
                     text: 'Data berhasil dihapus!',
                     icon: 'success',
                     showConfirmButton: false,
-                    timer: 1500
+                    timer: 1500,
+                    customClass: {
+                        popup: 'dark:bg-slate-900 dark:text-slate-100',
+                    }
                 })
             }
         })
     }
 
+    // Base styles
+    const baseStyles = 'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed'
+
+    // Size variants
+    const sizes = {
+        xs: 'px-2.5 py-1.5 text-xs',
+        sm: 'px-3 py-2 text-sm',
+        md: 'px-4 py-2.5 text-sm',
+        lg: 'px-5 py-3 text-base',
+    }
+
+    // Variant styles
+    const variants = {
+        primary: 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500 shadow-sm',
+        secondary: 'bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 focus:ring-slate-500',
+        success: 'bg-emerald-600 hover:bg-emerald-700 text-white focus:ring-emerald-500 shadow-sm',
+        danger: 'bg-red-600 hover:bg-red-700 text-white focus:ring-red-500 shadow-sm',
+        warning: 'bg-amber-500 hover:bg-amber-600 text-white focus:ring-amber-500 shadow-sm',
+        ghost: 'hover:bg-slate-100 text-slate-600 dark:hover:bg-slate-800 dark:text-slate-400 focus:ring-slate-500',
+        outline: 'border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 focus:ring-slate-500',
+    }
+
+    const buttonClass = `${baseStyles} ${sizes[size]} ${variants[variant] || ''} ${className || ''}`
+
     return (
         <>
             {type === 'link' &&
-                <Link href={href} className={`${className} px-4 py-2 flex items-center gap-2 rounded-lg text-sm font-semibold text-gray-200`}>
+                <Link href={href} className={buttonClass}>
                     {icon} <span className={`${added === true ? 'hidden lg:block' : ''}`}>{label}</span>
                 </Link>
             }
             {type === 'button' &&
-                <button className={`${className} px-4 py-2 flex items-center gap-1 rounded-lg text-sm font-semibold text-gray-200`} {...props}>
+                <button className={buttonClass} {...props}>
                     {icon} <span className={`${added === true ? 'hidden md:block' : ''}`}>{label}</span>
                 </button>
             }
             {type === 'submit' &&
-                <button type='submit' className={`${className} px-4 py-2 flex items-center gap-1 rounded-lg text-sm font-semibold`} {...props}>
+                <button type='submit' className={buttonClass} {...props}>
                     {icon} <span className={`${added === true ? 'hidden lg:block' : ''}`}>{label}</span>
                 </button>
             }
             {type === 'delete' &&
-                <button onClick={() => deleteData(url)} className={`${className} px-3 py-2 flex items-center gap-1 rounded-lg text-sm font-semibold`} {...props}>
+                <button onClick={() => deleteData(url)} className={`${baseStyles} ${sizes.sm} ${variants.danger} ${className || ''}`} {...props}>
                     {icon}
                 </button>
             }
             {type === 'modal' &&
-                <button className={`${className} px-3 py-2 flex items-center gap-1 rounded-lg text-sm font-semibold`} {...props}>
+                <button className={buttonClass} {...props}>
                     {icon}
                 </button>
             }
             {type === 'edit' &&
-                <Link href={href} className={`${className} px-3 py-2 flex items-center gap-1 rounded-lg text-sm font-semibold`} {...props}>
+                <Link href={href} className={`${baseStyles} ${sizes.sm} ${variants.warning} ${className || ''}`} {...props}>
                     {icon}
                 </Link>
             }
             {type === 'bulk' &&
-                <button {...props} className={`${className} px-4 py-2 flex items-center gap-2 rounded-lg text-sm font-semibold text-gray-200`}>
+                <button {...props} className={buttonClass}>
                     {icon} <span className={`${added === true ? 'hidden lg:block' : ''}`}>{label}</span>
                 </button>
             }

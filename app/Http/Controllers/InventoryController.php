@@ -24,11 +24,13 @@ class InventoryController extends Controller
             ->withSum('purchaseItems as purchase_quantity', 'quantity')
             ->withSum('purchaseItems as purchase_total', 'total_price')
 
-            // Menghitung total penjualan per produk dengan diskon
+            // Menghitung total penjualan per produk
             ->withSum('transactionDetails as sale_quantity', 'quantity')
-            ->withSum('transactionDetails as sale_total', function ($query) {
-                $query->select(DB::raw('SUM(quantity * price - (quantity * price * discount / 100))')); // Menghitung harga setelah diskon
-            })
+
+            // Menghitung total penjualan dengan diskon menggunakan subquery
+            ->addSelect(['sale_total' => \App\Models\TransactionDetail::selectRaw('SUM(quantity * price - (quantity * price * discount / 100))')
+                ->whereColumn('product_id', 'products.id')
+            ])
 
             // Urutkan berdasarkan deskripsi produk
             ->orderBy('description');

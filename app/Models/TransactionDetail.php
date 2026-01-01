@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class TransactionDetail extends Model
 {
     use HasFactory;
-    
+
     /**
      * Fillable fields
      *
@@ -29,11 +29,20 @@ class TransactionDetail extends Model
     }
 
     /**
-     * Product relationship
+     * Product relationship (belongsTo)
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
      */
-    // TransactionDetail Model
+    public function product()
+    {
+        return $this->belongsTo(Product::class);
+    }
+
+    /**
+     * Products relationship (many-to-many)
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     */
     public function products()
     {
         return $this->belongsToMany(Product::class, 'product_transaction_detail', 'transaction_detail_id', 'product_id');
