@@ -22,6 +22,7 @@ class Transaction extends Model
         'invoice',
         'cash',
         'change',
+        'discount',
         'grand_total',
         'payment_method',
         'payment_status',

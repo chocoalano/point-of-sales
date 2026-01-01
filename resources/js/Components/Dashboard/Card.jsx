@@ -1,22 +1,30 @@
 import React from 'react'
 
-export default function Card({ icon, title, children, footer, className, onSubmit }) {
+export default function Card({ icon, title, children, footer, className, onSubmit, form }) {
+    const handleSubmit = form || onSubmit;
+    const Wrapper = handleSubmit ? 'form' : 'section';
+
     return (
-        <>
-            <section onSubmit={onSubmit}>
-                <div className={`p-4 rounded-t-lg border ${className} bg-white dark:bg-gray-950 dark:border-gray-900 `}>
-                    <div className='flex items-center gap-2 font-semibold text-sm text-gray-700 dark:text-gray-200'>
+        <Wrapper
+            onSubmit={handleSubmit}
+            className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm"
+        >
+            {title && (
+                <div className={`px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 rounded-t-xl ${className || ''}`}>
+                    <div className='flex items-center gap-2 font-semibold text-sm text-slate-800 dark:text-slate-100'>
+                        {icon}
                         {title}
                     </div>
                 </div>
-                 {/* FORM DI SINI */}
-                <div className='bg-white dark:bg-gray-950 p-4 border border-t-0 border-b-0 dark:border-gray-900'>
-                    {children}
-                </div>
-                <div className={`px-4 py-2 rounded-b-lg border ${className} bg-white dark:bg-gray-950 dark:border-gray-900 `}>
+            )}
+            <div className='p-5'>
+                {children}
+            </div>
+            {footer && (
+                <div className={`px-5 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 rounded-b-xl ${className || ''}`}>
                     {footer}
                 </div>
-            </section>
-        </>
+            )}
+        </Wrapper>
     )
 }

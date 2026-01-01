@@ -40,9 +40,9 @@ class DashboardController extends Controller
             ->reverse()
             ->values();
 
-        $topProducts = TransactionDetail::select('barcode', DB::raw('SUM(quantity) as quantity'), DB::raw('SUM(price) as total'))
+        $topProducts = TransactionDetail::select('product_id', DB::raw('SUM(quantity) as quantity'), DB::raw('SUM(price) as total'))
             ->with('product:id,title')
-            ->groupBy('barcode')
+            ->groupBy('product_id')
             ->orderByDesc('quantity')
             ->take(5)
             ->get()

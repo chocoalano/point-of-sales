@@ -2,23 +2,25 @@ import React from 'react'
 
 const Card = ({ icon, title, className, children }) => {
     return (
-        <>
-            <div className={`p-4 rounded-t-lg border ${className} bg-white dark:bg-gray-950 dark:border-gray-900 `}>
-                <div className='flex items-center gap-1 font-semibold text-sm text-gray-700 dark:text-gray-200'>
-                    {title}
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+            {title && (
+                <div className={`px-5 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 ${className}`}>
+                    <div className='flex items-center gap-2 font-semibold text-sm text-slate-800 dark:text-slate-100'>
+                        {icon}
+                        {title}
+                    </div>
                 </div>
-            </div>
-            <div className='bg-white dark:bg-gray-950 rounded-b-lg border-t-0 dark:border-gray-900'>
+            )}
+            <div className='bg-white dark:bg-slate-900'>
                 {children}
             </div>
-        </>
-
+        </div>
     )
 }
 
 const Table = ({ children }) => {
     return (
-        <div className="w-full overflow-hidden overflow-x-auto border-collapse rounded-b-lg border border-t-0 dark:border-gray-900">
+        <div className="w-full overflow-x-auto">
             <table className="w-full text-sm">
                 {children}
             </table>
@@ -28,13 +30,15 @@ const Table = ({ children }) => {
 
 const Thead = ({ className, children }) => {
     return (
-        <thead className={`${className} border-b bg-gray-50 dark:border-gray-900 dark:bg-gray-950`}>{children}</thead>
+        <thead className={`${className} border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50`}>
+            {children}
+        </thead>
     );
 };
 
 const Tbody = ({ className, children }) => {
     return (
-        <tbody className={`${className} divide-y bg-white dark:divide-gray-900 dark:bg-gray-950`}>
+        <tbody className={`${className} divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900`}>
             {children}
         </tbody>
     );
@@ -42,9 +46,7 @@ const Tbody = ({ className, children }) => {
 
 const Td = ({ className, children }) => {
     return (
-        <td
-            className={`${className} whitespace-nowrap p-1 align-middle text-gray-700 dark:text-gray-400`}
-        >
+        <td className={`${className} whitespace-nowrap px-4 py-3 align-middle text-slate-700 dark:text-slate-300`}>
             {children}
         </td>
     );
@@ -54,7 +56,7 @@ const Th = ({ className, children }) => {
     return (
         <th
             scope="col"
-            className={`${className} h-12 px-4 text-left align-middle font-medium text-gray-700 dark:text-gray-400`}
+            className={`${className} h-12 px-4 text-left align-middle font-semibold text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400`}
         >
             {children}
         </th>
@@ -65,12 +67,14 @@ const Empty = ({ colSpan, message, children }) => {
     return (
         <tr>
             <td colSpan={colSpan}>
-                <div className="flex items-center justify-center h-96">
+                <div className="flex items-center justify-center py-16">
                     <div className="text-center">
-                        {children}
-                        <div className="mt-5">
-                            {message}
+                        <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4">
+                            {children}
                         </div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                            {message}
+                        </p>
                     </div>
                 </div>
             </td>

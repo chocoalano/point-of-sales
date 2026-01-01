@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Product extends Model
 {
     use HasFactory;
-    
+
     /**
      * fillable
      *
@@ -22,7 +22,7 @@ class Product extends Model
     /**
      * category
      *
-     * @return void
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
      */
     public function category()
     {
@@ -33,12 +33,31 @@ class Product extends Model
         return $this->belongsTo(Purchase::class);
     }
     // Purchase items for this product
-    public function purchaseItems() {
-    return $this->hasMany(PurchaseItem::class, 'product_id', 'id');
+    public function purchaseItems()
+    {
+        return $this->hasMany(PurchaseItem::class, 'product_id', 'id');
     }
 
-    // Product Model
+    // Inventory for this product
+    public function inventory()
+    {
+        return $this->hasOne(Inventory::class);
+    }
+
+    // Inventory adjustments for this product
+    public function inventoryAdjustments()
+    {
+        return $this->hasMany(InventoryAdjustment::class);
+    }
+
+    // Transaction details for this product (hasMany for aggregation)
     public function transactionDetails()
+    {
+        return $this->hasMany(TransactionDetail::class, 'product_id', 'id');
+    }
+
+    // Product to TransactionDetail many-to-many through pivot table
+    public function transactionDetailsPivot()
     {
         return $this->belongsToMany(TransactionDetail::class, 'product_transaction_detail', 'product_id', 'transaction_detail_id');
     }

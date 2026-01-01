@@ -7,11 +7,11 @@ export default function Pagination({ meta }) {
     }
 
 
-    const style = 'p-1 text-sm border rounded-md bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-950 dark:text-gray-400 dark:hover:bg-gray-900 dark:border-gray-900'
+    const style = 'p-1.5 text-sm border rounded-lg bg-white text-slate-500 hover:bg-slate-100 transition-colors dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:border-slate-700'
 
     return (
         <>
-            <ul className="mt-2 lg:mt-5 justify-end flex items-center gap-1">
+            <ul className="mt-4 lg:mt-6 justify-end flex items-center gap-1">
                 {meta.links.map((item, i) => {
                     return item.url != null ? (
                         item.label.includes('Previous') ? (
@@ -23,7 +23,11 @@ export default function Pagination({ meta }) {
                                 <IconChevronRight size={'20'} strokeWidth={'1.5'} />
                             </Link>
                         ) : (
-                            <Link className={`px-2 py-1 text-sm border  rounded-md text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-900 dark:border-gray-900 ${item.active ? 'bg-white text-gray-700 dark:bg-gray-900 dark:text-gray-50' : 'bg-white dark:bg-gray-950'}`} key={i} href={item.url}>
+                            <Link className={`px-3 py-1.5 text-sm border rounded-lg transition-colors dark:border-slate-700 ${
+                                item.active
+                                    ? 'bg-blue-600 text-white border-blue-600 dark:bg-blue-500 dark:border-blue-500'
+                                    : 'bg-white text-slate-600 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-400 dark:hover:bg-slate-800'
+                            }`} key={i} href={item.url}>
                                 {item.label}
                             </Link>
                         )

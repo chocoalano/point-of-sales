@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class Customer extends Model
 {
     use HasFactory;
-    
+
     /**
      * fillable
      *
@@ -17,4 +17,12 @@ class Customer extends Model
     protected $fillable = [
         'name', 'no_telp', 'address'
     ];
+
+    /**
+     * Get all transactions for the customer
+     */
+    public function transactions()
+    {
+        return $this->hasMany(Transaction::class);
+    }
 }

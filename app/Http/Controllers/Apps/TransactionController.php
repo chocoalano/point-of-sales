@@ -9,6 +9,7 @@ use App\Models\Customer;
 use App\Models\User;
 use App\Models\Transaction;
 use App\Models\PaymentSetting;
+use App\Services\InventoryService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
@@ -20,6 +21,13 @@ use Inertia\Inertia;
 
 class TransactionController extends Controller
 {
+    protected InventoryService $inventoryService;
+
+    public function __construct(InventoryService $inventoryService)
+    {
+        $this->inventoryService = $inventoryService;
+    }
+
     public function index()
     {
         //get cart
@@ -59,6 +67,35 @@ class TransactionController extends Controller
         return response()->json([
             'success' => (bool)$product,
             'data' => $product
+        ]);
+    }
+
+    /**
+     * Search products by partial barcode or title for autocomplete suggestions
+     */
+    public function suggestProducts(Request $request)
+    {
+        $query = $request->input('query', '');
+
+        if (strlen($query) < 2) {
+            return response()->json([
+                'success' => false,
+                'data' => []
+            ]);
+        }
+
+        $products = Product::where('stock', '>', 0)
+            ->where(function ($q) use ($query) {
+                $q->where('barcode', 'like', "%{$query}%")
+                  ->orWhere('title', 'like', "%{$query}%");
+            })
+            ->select('id', 'barcode', 'title', 'sell_price', 'stock')
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $products
         ]);
     }
 
@@ -134,6 +171,7 @@ class TransactionController extends Controller
                 'invoice' => $invoice,
                 'cash' => $cashAmount,
                 'change' => $changeAmount,
+                'discount' => $request->discount ?? 0,
                 'grand_total' => $request->grand_total,
                 'payment_method' => $paymentGateway ?: 'cash',
                 'payment_status' => $isCashPayment ? 'paid' : 'pending',
@@ -146,10 +184,11 @@ class TransactionController extends Controller
                 $transaction->details()->create([
                     'transaction_id' => $transaction->id,
                     'product_id' => $cart->product_id, // harus ada
+                    'barcode' => $cart->product->barcode ?? $cart->product->id,
                     'quantity' => $cart->quantity,
                     'price' => $cart->price,
                     'discount' => $cart->discount ?? 0,
-            ]);
+                ]);
 
                 // Hitung profit
                 $total_buy_price = $cart->product->buy_price * $cart->quantity;
@@ -159,10 +198,11 @@ class TransactionController extends Controller
                 $transaction->profits()->create([
                     'total' => $profits,
                 ]);
-
-                // Update stock
-                $cart->product->decrement('stock', $cart->quantity);
             }
+
+            // Update stock using InventoryService (after all details are created)
+            $transaction->load('details.product');
+            $this->inventoryService->processTransaction($transaction);
 
             // Hapus semua cart
             Cart::where('cashier_id', auth()->id())->delete();
@@ -227,6 +267,33 @@ class TransactionController extends Controller
         return Inertia::render('Dashboard/Transactions/History', [
             'transactions' => $transactions,
             'filters' => $filters,
+        ]);
+    }
+
+    public function show($invoice)
+    {
+        $transaction = Transaction::with([
+            'details.product.category',
+            'details.product.inventory',
+            'cashier:id,name,email',
+            'customer',
+            'profits'
+        ])
+            ->withSum('details as total_items', 'quantity')
+            ->withSum('profits as total_profit', 'total')
+            ->where('invoice', $invoice)
+            ->firstOrFail();
+
+        // Get inventory adjustments related to this transaction
+        $inventoryAdjustments = \App\Models\InventoryAdjustment::with('product:id,title,barcode', 'user:id,name')
+            ->where('reference_type', 'transaction')
+            ->where('reference_id', $transaction->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        return Inertia::render('Dashboard/Transactions/Show', [
+            'transaction' => $transaction,
+            'inventoryAdjustments' => $inventoryAdjustments,
         ]);
     }
 }

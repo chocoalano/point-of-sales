@@ -1,118 +1,130 @@
 import React from "react";
 import { usePage } from "@inertiajs/react";
-import { IconBrandReact } from "@tabler/icons-react";
+import { IconCash, IconX } from "@tabler/icons-react";
 import LinkItem from "@/Components/Dashboard/LinkItem";
 import LinkItemDropdown from "@/Components/Dashboard/LinkItemDropdown";
 import Menu from "@/Utils/Menu";
 
-export default function Sidebar({ sidebarOpen }) {
+export default function Sidebar({ sidebarOpen, isMobile = false, onClose }) {
     const { auth } = usePage().props;
     const menuNavigation = Menu();
 
     return (
-        <div className={`${sidebarOpen ? 'w-[260px]' : 'w-[100px]'} hidden md:block min-h-screen overflow-y-auto border-r transition-all duration-300 bg-white dark:bg-gray-950 dark:border-gray-900`}>
-            {sidebarOpen ? (
-                <>
-                    <div className="flex justify-center items-center px-6 py-2 h-16">
-                        <div className="text-2xl font-bold text-center leading-loose tracking-wider text-gray-900 dark:text-gray-200">
-                            KASIR
-                        </div>
+        <div className={`
+            ${isMobile ? 'w-72 h-full' : sidebarOpen ? 'w-[260px]' : 'w-[100px]'}
+            ${isMobile ? '' : 'hidden md:block fixed left-0 top-0 h-screen'}
+            overflow-y-auto border-r transition-all duration-300
+            bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800
+            scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700
+        `}>
+            {/* Header */}
+            <div className={`
+                flex items-center h-16 border-b border-slate-200 dark:border-slate-800
+                ${sidebarOpen ? 'justify-between px-5' : 'justify-center px-3'}
+            `}>
+                <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                        <IconCash className="w-5 h-5 text-white" />
                     </div>
-                    <div className="w-full p-3 flex items-center gap-4 border-b border-t dark:bg-gray-950/50 dark:border-gray-900">
-                        <img src={auth.user.avatar ? auth.user.avatar : "https://ui-avatars.com/api/?name=" + auth.user.name} className="w-12 h-12 rounded-full" />
-                        <div className="flex flex-col gap-0.5">
-                            <div className="text-sm font-semibold capitalize text-gray-700 dark:text-gray-50">
+                    {sidebarOpen && (
+                        <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                            POS Pro
+                        </span>
+                    )}
+                </div>
+                {isMobile && onClose && (
+                    <button
+                        onClick={onClose}
+                        className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    >
+                        <IconX size={20} />
+                    </button>
+                )}
+            </div>
+
+            {/* User Profile */}
+            <div className={`
+                border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50
+                ${sidebarOpen ? 'p-4' : 'p-3 flex justify-center'}
+            `}>
+                {sidebarOpen ? (
+                    <div className="flex items-center gap-3">
+                        <div className="relative">
+                            <img
+                                src={auth.user.avatar ? auth.user.avatar : `https://ui-avatars.com/api/?name=${auth.user.name}&background=3b82f6&color=fff`}
+                                className="w-11 h-11 rounded-xl object-cover ring-2 ring-white dark:ring-slate-800 shadow-md"
+                                alt={auth.user.name}
+                            />
+                            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 border-2 border-white dark:border-slate-800 rounded-full" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate capitalize">
                                 {auth.user.name}
                             </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 truncate">
                                 {auth.user.email}
                             </div>
                         </div>
                     </div>
-                    <div className="w-full flex flex-col overflow-y-auto">
-                        {menuNavigation.map((item, index) => (
-                            item.details.some(detail => detail.permissions === true) && (
-                                <div key={index}>
-                                    <div className="text-gray-500 text-xs py-3 px-4 font-bold uppercase">
-                                        {item.title}
-                                    </div>
-                                    {item.details.map((detail, indexDetail) => (
-                                        detail.permissions === true && (
-                                            detail.hasOwnProperty('subdetails') ? (
-                                                <LinkItemDropdown
-                                                    key={indexDetail}
-                                                    title={detail.title}
-                                                    icon={detail.icon}
-                                                    data={detail.subdetails}
-                                                    access={detail.permissions}
-                                                    sidebarOpen={sidebarOpen}
-                                                />
-                                            ) : (
-                                                <LinkItem
-                                                    key={indexDetail}
-                                                    title={detail.title}
-                                                    icon={detail.icon}
-                                                    href={detail.href}
-                                                    access={detail.permissions}
-                                                    sidebarOpen={sidebarOpen}
-                                                />
-                                            )
-                                        )
-                                    ))}
+                ) : (
+                    <div className="relative">
+                        <img
+                            src={auth.user.avatar ? auth.user.avatar : `https://ui-avatars.com/api/?name=${auth.user.name}&background=3b82f6&color=fff`}
+                            className="w-10 h-10 rounded-xl object-cover ring-2 ring-white dark:ring-slate-800 shadow-md"
+                            alt={auth.user.name}
+                        />
+                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white dark:border-slate-800 rounded-full" />
+                    </div>
+                )}
+            </div>
+
+            {/* Navigation */}
+            <div className="flex flex-col py-4 overflow-y-auto">
+                {menuNavigation.map((item, index) => (
+                    item.details.some(detail => detail.permissions === true) && (
+                        <div key={index} className="mb-2">
+                            {sidebarOpen && (
+                                <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                                    {item.title}
                                 </div>
-                            )
-                        ))}
-                    </div>
-                </>
-            ) : (
-                <>
-                    <div className="flex justify-center items-center px-6 py-2 h-16 border-b dark:border-gray-900">
-                        <IconBrandReact size={20} strokeWidth={1.5} className="sidebar-title" />
-                    </div>
-                    <div className='w-full px-6 py-3 flex justify-center items-center gap-4 border-b bg-white dark:bg-gray-950/50 dark:border-gray-900'>
-                        <img src={auth.user.avatar ? auth.user.avatar : "https://ui-avatars.com/api/?name=" + auth.user.name} className='w-8 h-8 rounded-full' />
-                    </div>
-                    <div className="w-full flex flex-col overflow-y-auto items-center justify-center">
-                        {menuNavigation.map((link, i) => {
-                            const visibleDetails = link.details.filter(
-                                (detail) => detail.permissions === true
-                            );
-
-                            if (!visibleDetails.length) {
-                                return null;
-                            }
-
-                            return (
-                                <div
-                                    className="flex flex-col min-w-full items-center relative"
-                                    key={i}
-                                >
-                                    {visibleDetails.map((detail, x) =>
-                                        detail.hasOwnProperty("subdetails") ? (
+                            )}
+                            <div className={sidebarOpen ? 'px-2' : 'px-2 flex flex-col items-center'}>
+                                {item.details.map((detail, indexDetail) => (
+                                    detail.permissions === true && (
+                                        detail.hasOwnProperty('subdetails') ? (
                                             <LinkItemDropdown
-                                                sidebarOpen={sidebarOpen}
-                                                key={x}
+                                                key={indexDetail}
                                                 title={detail.title}
-                                                data={detail.subdetails}
                                                 icon={detail.icon}
+                                                data={detail.subdetails}
                                                 access={detail.permissions}
+                                                sidebarOpen={sidebarOpen}
                                             />
                                         ) : (
                                             <LinkItem
-                                                sidebarOpen={sidebarOpen}
-                                                key={x}
-                                                access={detail.permissions}
+                                                key={indexDetail}
+                                                title={detail.title}
                                                 icon={detail.icon}
                                                 href={detail.href}
-                                                title={detail.title}
+                                                access={detail.permissions}
+                                                sidebarOpen={sidebarOpen}
                                             />
                                         )
-                                    )}
-                                </div>
-                            );
-                        })}
+                                    )
+                                ))}
+                            </div>
+                        </div>
+                    )
+                ))}
+            </div>
+
+            {/* Footer */}
+            {sidebarOpen && (
+                <div className="mt-auto p-4 border-t border-slate-200 dark:border-slate-800">
+                    <div className="text-[10px] text-center text-slate-400 dark:text-slate-500">
+                        v2.0.0 • © {new Date().getFullYear()}
                     </div>
-                </>
+                </div>
             )}
         </div>
     );

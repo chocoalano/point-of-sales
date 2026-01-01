@@ -1,11 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Menu, Transition } from '@headlessui/react'
 import { Link, usePage } from '@inertiajs/react'
-import { IconLogout, IconUserCog } from '@tabler/icons-react'
+import { IconLogout, IconUserCog, IconChevronDown } from '@tabler/icons-react'
 import { useForm } from '@inertiajs/react'
-import MenuLink from '@/Utils/Menu'
-import LinkItem from './LinkItem'
-import LinkItemDropdown from './LinkItemDropdown'
+
 export default function AuthDropdown({ auth, isMobile }) {
 
     // define usefrom
@@ -13,135 +11,91 @@ export default function AuthDropdown({ auth, isMobile }) {
     // define url from usepage
     const { url } = usePage();
 
-    // define state isToggle
-    const [isToggle, setIsToggle] = useState(false);
-    // define state isOpen
-    const [isOpen, setIsOpen] = useState(false);
-    // define ref dropdown
-    const dropdownRef = useRef(null);
-
-    // define method handleClickOutside
-    const handleClickOutside = (event) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-            setIsToggle(false);
-        }
-    };
-
-    // get menu from utils
-    const menuNavigation = MenuLink();
-
-    // define useEffect
-    useEffect(() => {
-        // add event listener
-        window.addEventListener("mousedown", handleClickOutside);
-
-        // remove event listener
-        return () => {
-            window.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, []);
-
     // define function logout
     const logout = async (e) => {
         e.preventDefault();
-
         post(route('logout'));
     }
 
     return (
-        <>
-            {isMobile === false ?
-                <Menu className='relative z-10' as="div">
-                    <Menu.Button className='flex items-center rounded-full'>
-                        <img src={auth.user.avatar ? auth.user.avatar : "https://ui-avatars.com/api/?name=" + auth.user.name} alt={auth.user.name} className='w-10 h-10 rounded-full' />
-                    </Menu.Button>
-                    <Transition
-                        enter="transition duration-100 ease-out"
-                        enterFrom="transform scale-95 opacity-0"
-                        enterTo="transform scale-100 opacity-100"
-                        leave="transition duration-75 ease-out"
-                        leaveFrom="transform scale-100 opacity-100"
-                        leaveTo="transform scale-95 opacity-0"
-                    >
-                        <Menu.Items className='absolute rounded-lg w-48 border mt-2 py-2 right-0 z-[100] bg-white dark:bg-gray-950 dark:border-gray-900'>
-                            <div className='flex flex-col gap-1.5 divide-y divide-gray-100 dark:divide-gray-900'>
-                                {/* <Menu.Item>
-                                    <Link href="/apps/profile" className='px-3 py-1.5 text-sm flex items-center gap-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'>
-                                        <IconUserCog strokeWidth={'1.5'} size={'20'} /> Profile
-                                    </Link>
-                                </Menu.Item> */}
-                                <Menu.Item>
-                                    <button onClick={logout} className='px-3 py-1.5 text-sm flex items-center gap-2 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'>
-                                        <IconLogout strokeWidth={'1.5'} size={'20'} />
-                                        Logout
-                                    </button>
-                                </Menu.Item>
-                            </div>
-                        </Menu.Items>
-                    </Transition>
-                </Menu>
-                :
-                <div ref={dropdownRef}>
-                    <button className="flex items-center group" onClick={() => setIsToggle(!isToggle)}>
-                        <img src={auth.user.avatar ? auth.user.avatar : "https://ui-avatars.com/api/?name=" + auth.user.name} alt={auth.user.name} className='w-10 h-10 rounded-full' />
-                    </button>
-                    <div className={`${isToggle ? 'translate-x-0 opacity-100' : '-translate-x-full'} fixed top-0 left-0 z-50 w-[300px] h-full transition-all duration-300 transform border-r bg-white dark:bg-gray-950 dark:border-gray-900`}>
-                        <div className="flex justify-center items-center px-6 py-2 h-16">
-                            <div className="text-2xl font-bold text-center leading-loose tracking-wider text-gray-900 dark:text-gray-200">
-                                KASIR
-                            </div>
-                        </div>
-                        <div className="w-full p-3 flex items-center gap-4 border-b border-t dark:bg-gray-950/50 dark:border-gray-900">
+        <Menu className='relative' as="div">
+            <Menu.Button className='flex items-center gap-2 p-1.5 pr-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors'>
+                <img
+                    src={auth.user.avatar ? auth.user.avatar : `https://ui-avatars.com/api/?name=${auth.user.name}&background=3b82f6&color=fff`}
+                    alt={auth.user.name}
+                    className='w-9 h-9 rounded-xl ring-2 ring-white dark:ring-slate-800 shadow-sm'
+                />
+                <div className='hidden md:flex flex-col items-start'>
+                    <span className='text-sm font-medium text-slate-700 dark:text-slate-200 capitalize max-w-[120px] truncate'>
+                        {auth.user.name}
+                    </span>
+                </div>
+                <IconChevronDown size={16} className='text-slate-400 hidden md:block' />
+            </Menu.Button>
+
+            <Transition
+                enter="transition duration-100 ease-out"
+                enterFrom="transform scale-95 opacity-0"
+                enterTo="transform scale-100 opacity-100"
+                leave="transition duration-75 ease-out"
+                leaveFrom="transform scale-100 opacity-100"
+                leaveTo="transform scale-95 opacity-0"
+            >
+                <Menu.Items className='absolute right-0 mt-2 w-56 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg shadow-slate-200/50 dark:shadow-slate-900/50 py-2 z-[100]'>
+                    {/* User Info */}
+                    <div className='px-4 py-3 border-b border-slate-200 dark:border-slate-700'>
+                        <div className='flex items-center gap-3'>
                             <img
-                                src={auth.user.avatar ? auth.user.avatar : "https://ui-avatars.com/api/?name=" + auth.user.name}
-                                className="w-12 h-12 rounded-full"
+                                src={auth.user.avatar ? auth.user.avatar : `https://ui-avatars.com/api/?name=${auth.user.name}&background=3b82f6&color=fff`}
+                                alt={auth.user.name}
+                                className='w-10 h-10 rounded-xl'
                             />
-                            <div className="flex flex-col gap-0.5">
-                                <div className="text-sm font-semibold capitalize text-gray-700 dark:text-gray-50">
+                            <div className='flex-1 min-w-0'>
+                                <div className='text-sm font-semibold text-slate-800 dark:text-slate-100 capitalize truncate'>
                                     {auth.user.name}
                                 </div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                <div className='text-xs text-slate-500 dark:text-slate-400 truncate'>
                                     {auth.user.email}
                                 </div>
                             </div>
                         </div>
-                        <div className="w-full flex flex-col overflow-y-auto">
-                            {menuNavigation.map((item, index) => (
-                                item.details.some(detail => detail.permissions === true) && (
-
-                                    <div key={index}>
-                                        <div className="text-gray-500 text-xs py-3 px-4 font-bold uppercase">
-                                            {item.title}
-                                        </div>
-                                        {item.details.map((detail, indexDetail) => (
-                                            detail.hasOwnProperty('subdetails') ?
-                                                <LinkItemDropdown
-                                                    key={indexDetail}
-                                                    title={detail.title}
-                                                    icon={detail.icon}
-                                                    data={detail.subdetails}
-                                                    access={detail.permissions}
-                                                    sidebarOpen={true}
-                                                    onClick={() => setIsToggle(!isToggle)}
-                                                />
-                                                :
-                                                <LinkItem
-                                                    key={indexDetail}
-                                                    title={detail.title}
-                                                    icon={detail.icon}
-                                                    href={detail.href}
-                                                    access={detail.permissions}
-                                                    sidebarOpen={true}
-                                                    onClick={() => setIsToggle(!isToggle)}
-                                                />
-                                        ))}
-                                    </div>
-                                )
-                            ))}
-                        </div>
                     </div>
-                </div>
-            }
-        </>
+
+                    {/* Menu Items */}
+                    <div className='py-2'>
+                        {/* <Menu.Item>
+                            {({ active }) => (
+                                <Link
+                                    href="/dashboard/profile"
+                                    className={`flex items-center gap-3 px-4 py-2.5 text-sm ${
+                                        active
+                                            ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-slate-100'
+                                            : 'text-slate-600 dark:text-slate-400'
+                                    } transition-colors`}
+                                >
+                                    <IconUserCog size={18} strokeWidth={1.5} />
+                                    Profile Settings
+                                </Link>
+                            )}
+                        </Menu.Item> */}
+                        <Menu.Item>
+                            {({ active }) => (
+                                <button
+                                    onClick={logout}
+                                    className={`flex items-center gap-3 px-4 py-2.5 text-sm w-full ${
+                                        active
+                                            ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                                            : 'text-slate-600 dark:text-slate-400'
+                                    } transition-colors`}
+                                >
+                                    <IconLogout size={18} strokeWidth={1.5} />
+                                    Logout
+                                </button>
+                            )}
+                        </Menu.Item>
+                    </div>
+                </Menu.Items>
+            </Transition>
+        </Menu>
     )
 }

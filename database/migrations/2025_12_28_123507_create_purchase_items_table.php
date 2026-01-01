@@ -16,8 +16,9 @@ return new class extends Migration
                 ->cascadeOnDelete();
 
             $table->foreignId('product_id')
+                ->nullable()
                 ->constrained()
-                ->cascadeOnDelete();
+                ->nullOnDelete();
 
             // BARCODE HANYA SEKALI & STRING
             $table->string('barcode')->nullable();
