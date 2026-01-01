@@ -80,11 +80,12 @@ export default function Index({ purchases, filters }) {
 
     // Format currency
     const formatCurrency = (value) => {
+        const num = Number(value);
         return new Intl.NumberFormat("id-ID", {
             style: "currency",
             currency: "IDR",
             minimumFractionDigits: 0,
-        }).format(value || 0);
+        }).format(isNaN(num) ? 0 : num);
     };
 
     // Handle delete
@@ -139,11 +140,10 @@ export default function Index({ purchases, filters }) {
 
     // Calculate total for purchase
     const calculatePurchaseTotal = (purchase) => {
-        return (
-            purchase.items?.reduce(
-                (sum, item) => sum + (item.total_price || 0),
-                0
-            ) || 0
+        if (!purchase?.items || purchase.items.length === 0) return 0;
+        return purchase.items.reduce(
+            (sum, item) => sum + (Number(item.total_price) || 0),
+            0
         );
     };
 
@@ -568,24 +568,22 @@ export default function Index({ purchases, filters }) {
                                                             "-"}
                                                     </td>
                                                     <td className="py-2 px-3 text-right text-slate-900 dark:text-slate-100">
-                                                        {item.quantity || 0}
+                                                        {Number(item.quantity) || 0}
                                                     </td>
                                                     <td className="py-2 px-3 text-right text-slate-900 dark:text-slate-100">
                                                         {formatCurrency(
-                                                            item.purchase_price
+                                                            Number(item.purchase_price) || 0
                                                         )}
                                                     </td>
                                                     <td className="py-2 px-3 text-right text-slate-900 dark:text-slate-100">
-                                                        {item.discount_percent ||
-                                                            0}
-                                                        %
+                                                        {Number(item.discount_percent) || 0}%
                                                     </td>
                                                     <td className="py-2 px-3 text-right text-slate-900 dark:text-slate-100">
-                                                        {item.tax_percent || 0}%
+                                                        {Number(item.tax_percent) || 0}%
                                                     </td>
                                                     <td className="py-2 px-3 text-right font-medium text-slate-900 dark:text-slate-100">
                                                         {formatCurrency(
-                                                            item.total_price
+                                                            Number(item.total_price) || 0
                                                         )}
                                                     </td>
                                                 </tr>

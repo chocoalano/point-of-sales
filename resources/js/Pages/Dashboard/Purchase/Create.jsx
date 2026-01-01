@@ -182,15 +182,40 @@ export default function Create({ products }) {
     };
 
     const formatCurrency = (value) => {
+        const num = Number(value);
         return new Intl.NumberFormat('id-ID', {
             style: 'currency',
             currency: 'IDR',
             minimumFractionDigits: 0,
-        }).format(value || 0);
+        }).format(isNaN(num) ? 0 : num);
     };
 
     const calculateGrandTotal = () => {
         return cartItems.reduce((sum, item) => sum + calculateTotal(item, data.tax_included), 0);
+    };
+
+    const calculateSubtotal = () => {
+        return cartItems.reduce((sum, item) => {
+            const quantity = Number(item.quantity) || 0;
+            const price = Number(item.purchase_price) || 0;
+            const discount = Number(item.discount_percent) || 0;
+            let subtotal = quantity * price;
+            subtotal -= subtotal * (discount / 100);
+            return sum + subtotal;
+        }, 0);
+    };
+
+    const calculateTotalPPN = () => {
+        if (!data.tax_included) return 0;
+        return cartItems.reduce((sum, item) => {
+            const quantity = Number(item.quantity) || 0;
+            const price = Number(item.purchase_price) || 0;
+            const discount = Number(item.discount_percent) || 0;
+            const tax = Number(item.tax_percent) || 0;
+            let subtotal = quantity * price;
+            subtotal -= subtotal * (discount / 100);
+            return sum + (subtotal * (tax / 100));
+        }, 0);
     };
 
     const statusOptions = [
@@ -314,7 +339,7 @@ export default function Create({ products }) {
                         <Table>
                             <Table.Thead>
                                 <tr>
-                                    <Table.Th className="w-10">
+                                    <Table.Th className="w-12 text-center">
                                         <input
                                             type="checkbox"
                                             checked={cartItems.length > 0 && cartItems.every(item => item.checked)}
@@ -324,20 +349,20 @@ export default function Create({ products }) {
                                             className="rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500"
                                         />
                                     </Table.Th>
-                                    <Table.Th className="min-w-[150px]">Barcode</Table.Th>
-                                    <Table.Th className="min-w-[120px]">Produk</Table.Th>
-                                    <Table.Th className="w-24">Qty</Table.Th>
-                                    <Table.Th className="w-32">Harga</Table.Th>
-                                    <Table.Th className="w-20">Diskon %</Table.Th>
-                                    <Table.Th className="w-20">PPN %</Table.Th>
-                                    <Table.Th className="w-32 text-right">Total</Table.Th>
-                                    <Table.Th className="w-10"></Table.Th>
+                                    <Table.Th className="w-[180px]">Barcode</Table.Th>
+                                    <Table.Th className="min-w-[200px]">Produk</Table.Th>
+                                    <Table.Th className="w-[100px] text-center">Qty</Table.Th>
+                                    <Table.Th className="w-[140px] text-center">Harga</Table.Th>
+                                    <Table.Th className="w-[100px] text-center">Diskon %</Table.Th>
+                                    <Table.Th className="w-[90px] text-center">PPN %</Table.Th>
+                                    <Table.Th className="w-[150px] text-right">Total</Table.Th>
+                                    <Table.Th className="w-12"></Table.Th>
                                 </tr>
                             </Table.Thead>
                             <Table.Tbody>
                                 {cartItems.map((item, index) => (
                                     <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                                        <Table.Td>
+                                        <Table.Td className="text-center">
                                             <input
                                                 type="checkbox"
                                                 checked={item.checked}
@@ -352,20 +377,20 @@ export default function Create({ products }) {
                                                     value={item.barcode}
                                                     onChange={(e) => updateRow(index, 'barcode', e.target.value)}
                                                     onKeyDown={(e) => handleEnterKey(e, index, 'barcode')}
-                                                    placeholder="Scan/ketik barcode"
+                                                    placeholder="Scan barcode"
                                                     className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                                                 />
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSearchProduct(index)}
-                                                    className="p-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:hover:bg-slate-600"
+                                                    className="p-1.5 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-400 dark:hover:bg-slate-600 shrink-0"
                                                 >
                                                     <IconSearch size={16} />
                                                 </button>
                                             </div>
                                         </Table.Td>
                                         <Table.Td>
-                                            <span className="text-sm text-slate-600 dark:text-slate-400">
+                                            <span className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
                                                 {item.product?.description || '-'}
                                             </span>
                                         </Table.Td>
@@ -376,7 +401,7 @@ export default function Create({ products }) {
                                                 value={item.quantity}
                                                 onChange={(e) => updateRow(index, 'quantity', Number(e.target.value) || 1)}
                                                 onKeyDown={blockMinus}
-                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-right"
+                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-center"
                                             />
                                         </Table.Td>
                                         <Table.Td>
@@ -397,7 +422,7 @@ export default function Create({ products }) {
                                                 value={item.discount_percent}
                                                 onChange={handleNumberChange(index, 'discount_percent')}
                                                 onKeyDown={blockMinus}
-                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-right"
+                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-center"
                                             />
                                         </Table.Td>
                                         <Table.Td>
@@ -408,13 +433,13 @@ export default function Create({ products }) {
                                                 value={item.tax_percent}
                                                 onChange={handleNumberChange(index, 'tax_percent')}
                                                 onKeyDown={blockMinus}
-                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-right"
+                                                className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded-md bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-center"
                                             />
                                         </Table.Td>
-                                        <Table.Td className="text-right font-medium text-slate-900 dark:text-slate-100">
+                                        <Table.Td className="text-right font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">
                                             {formatCurrency(calculateTotal(item, data.tax_included))}
                                         </Table.Td>
-                                        <Table.Td>
+                                        <Table.Td className="text-center">
                                             <button
                                                 type="button"
                                                 onClick={() => {
@@ -424,7 +449,7 @@ export default function Create({ products }) {
                                                     }
                                                     setCartItems(prev => prev.filter((_, i) => i !== index));
                                                 }}
-                                                className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                                                className="p-1.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
                                             >
                                                 <IconTrash size={16} />
                                             </button>
@@ -435,9 +460,35 @@ export default function Create({ products }) {
                         </Table>
                     </div>
 
-                    {/* Grand Total */}
-                    <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
-                        <div className="flex justify-between items-center">
+                    {/* Summary */}
+                    <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg space-y-3">
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-600 dark:text-slate-400">
+                                Jumlah Item
+                            </span>
+                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                                {cartItems.filter(item => item.barcode).length} item
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-600 dark:text-slate-400">
+                                Subtotal (sebelum PPN)
+                            </span>
+                            <span className="font-medium text-slate-700 dark:text-slate-300">
+                                {formatCurrency(calculateSubtotal())}
+                            </span>
+                        </div>
+                        {data.tax_included && (
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-600 dark:text-slate-400">
+                                    Total PPN
+                                </span>
+                                <span className="font-medium text-slate-700 dark:text-slate-300">
+                                    {formatCurrency(Math.round(calculateTotalPPN()))}
+                                </span>
+                            </div>
+                        )}
+                        <div className="pt-3 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
                             <span className="text-lg font-semibold text-slate-700 dark:text-slate-300">
                                 Grand Total
                             </span>

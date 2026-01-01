@@ -6,6 +6,7 @@ use App\Http\Controllers\Apps\ProductController;
 use App\Http\Controllers\Apps\TransactionController;
 use App\Http\Controllers\Apps\PaymentSettingController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\InventoryAdjustmentController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProfileController;
@@ -66,6 +67,9 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     //route transaction searchProduct
     Route::post('/transactions/searchProduct', [TransactionController::class, 'searchProduct'])->middleware('permission:transactions-access')->name('transactions.searchProduct');
 
+    //route transaction suggestProducts (autocomplete)
+    Route::get('/transactions/suggestProducts', [TransactionController::class, 'suggestProducts'])->middleware('permission:transactions-access')->name('transactions.suggestProducts');
+
     //route transaction addToCart
     Route::post('/transactions/addToCart', [TransactionController::class, 'addToCart'])->middleware('permission:transactions-access')->name('transactions.addToCart');
 
@@ -75,6 +79,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     //route transaction store
     Route::post('/transactions/store', [TransactionController::class, 'store'])->middleware('permission:transactions-access')->name('transactions.store');
     Route::get('/transactions/{invoice}/print', [TransactionController::class, 'print'])->middleware('permission:transactions-access')->name('transactions.print');
+    Route::get('/transactions/{invoice}/show', [TransactionController::class, 'show'])->middleware('permission:transactions-access')->name('transactions.show');
     Route::get('/transactions/history', [TransactionController::class, 'history'])->middleware('permission:transactions-access')->name('transactions.history');
 
     Route::get('/settings/payments', [PaymentSettingController::class, 'edit'])->middleware('permission:payment-settings-access')->name('settings.payments.edit');
@@ -84,6 +89,7 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::get('/reports/sales', [SalesReportController::class, 'index'])->middleware('permission:reports-access')->name('reports.sales.index');
     Route::get('/reports/profits', [ProfitReportController::class, 'index'])->middleware('permission:profits-access')->name('reports.profits.index');
     Route::get('/reports/inventories', [InventoryController::class, 'index'])->middleware('permission:inventories-access')->name('reports.inventories.index');
+    Route::get('/reports/inventories/{id}', [InventoryController::class, 'show'])->middleware('permission:inventories-access')->name('reports.inventories.show');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -92,9 +98,18 @@ Route::group(['prefix' => 'dashboard', 'middleware' => ['auth']], function () {
     Route::get('/purchase', [PurchaseController::class, 'index'])->name('purchase.index');
     Route::get('/purchase/create', [PurchaseController::class, 'create'])->name('purchase.create');
     Route::post('/purchase', [PurchaseController::class, 'store'])->name('purchase.store');
+    Route::get('/purchase/{purchase}', [PurchaseController::class, 'show'])->name('purchase.show');
     Route::get('/purchase/{purchase}/edit', [PurchaseController::class, 'edit'])->name('purchase.edit');
     Route::put('/purchase/{purchase}', [PurchaseController::class, 'update'])->name('purchase.update');
     Route::delete('/purchase/{purchase}', [PurchaseController::class, 'destroy'])->name('purchase.destroy');
+
+    // Inventory Adjustments
+    Route::get('/inventory-adjustments', [InventoryAdjustmentController::class, 'index'])->name('inventory-adjustments.index');
+    Route::get('/inventory-adjustments/create', [InventoryAdjustmentController::class, 'create'])->name('inventory-adjustments.create');
+    Route::post('/inventory-adjustments', [InventoryAdjustmentController::class, 'store'])->name('inventory-adjustments.store');
+    Route::get('/inventory-adjustments/{inventoryAdjustment}', [InventoryAdjustmentController::class, 'show'])->name('inventory-adjustments.show');
+    Route::get('/inventory-adjustments/product/{product}', [InventoryAdjustmentController::class, 'productHistory'])->name('inventory-adjustments.product-history');
+    Route::post('/inventory-adjustments/sync', [InventoryAdjustmentController::class, 'syncInventory'])->name('inventory-adjustments.sync');
 });
 
 require __DIR__ . '/auth.php';

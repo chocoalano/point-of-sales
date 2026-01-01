@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Head, router, usePage } from "@inertiajs/react";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -18,6 +18,8 @@ import {
     IconShoppingCartPlus,
     IconTrash,
     IconUser,
+    IconSearch,
+    IconX,
 } from "@tabler/icons-react";
 
 export default function Index({
@@ -39,6 +41,14 @@ export default function Index({
     const [paymentMethod, setPaymentMethod] = useState(
         defaultPaymentGateway ?? "cash"
     );
+
+    // New states for suggestions dropdown
+    const [suggestions, setSuggestions] = useState([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
+    const suggestionsRef = useRef(null);
+    const inputRef = useRef(null);
+    const debounceTimerRef = useRef(null);
 
     useEffect(() => {
         setPaymentMethod(defaultPaymentGateway ?? "cash");
@@ -137,7 +147,93 @@ export default function Index({
         setBarcode("");
         setProduct(null);
         setquantity(1);
+        setSuggestions([]);
+        setShowSuggestions(false);
     };
+
+    // Debounced product suggestions fetch
+    const fetchSuggestions = useCallback(async (query) => {
+        if (query.length < 2) {
+            setSuggestions([]);
+            setShowSuggestions(false);
+            return;
+        }
+
+        setIsFetchingSuggestions(true);
+
+        try {
+            const { data } = await axios.get(
+                "/dashboard/transactions/suggestProducts",
+                { params: { query } }
+            );
+
+            if (data.success && data.data.length > 0) {
+                setSuggestions(data.data);
+                setShowSuggestions(true);
+            } else {
+                setSuggestions([]);
+                setShowSuggestions(false);
+            }
+        } catch (error) {
+            console.error("Error fetching suggestions:", error);
+            setSuggestions([]);
+        } finally {
+            setIsFetchingSuggestions(false);
+        }
+    }, []);
+
+    // Handle barcode input change with debounce
+    const handleBarcodeChange = (event) => {
+        const value = event.target.value;
+        setBarcode(value);
+
+        // Clear previous debounce timer
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        // Set new debounce timer (300ms delay)
+        debounceTimerRef.current = setTimeout(() => {
+            fetchSuggestions(value);
+        }, 300);
+    };
+
+    // Handle selecting a suggestion
+    const handleSelectSuggestion = (selectedProduct) => {
+        setBarcode(selectedProduct.barcode);
+        setProduct(selectedProduct);
+        setquantity(1);
+        setSuggestions([]);
+        setShowSuggestions(false);
+    };
+
+    // Close suggestions when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (
+                suggestionsRef.current &&
+                !suggestionsRef.current.contains(event.target) &&
+                inputRef.current &&
+                !inputRef.current.contains(event.target)
+            ) {
+                setShowSuggestions(false);
+            }
+        };
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
+    // Cleanup debounce timer on unmount
+    useEffect(() => {
+        return () => {
+            if (debounceTimerRef.current) {
+                clearTimeout(debounceTimerRef.current);
+            }
+        };
+    }, []);
 
     const handleSearchProduct = async (event) => {
         event?.preventDefault();
@@ -149,6 +245,7 @@ export default function Index({
         }
 
         setIsSearching(true);
+        setShowSuggestions(false);
 
         try {
             const { data } = await axios.post(
@@ -192,7 +289,7 @@ export default function Index({
         router.post(
             route("transactions.addToCart"),
             {
-                barcode: product.id,
+                barcode: product.barcode,
                 sell_price: product.sell_price,
                 quantity,
             },
@@ -260,7 +357,7 @@ export default function Index({
                         <p className="text-3xl font-semibold text-gray-900 dark:text-white">
                             {cartCount}
                         </p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                             Produk di keranjang
                         </p>
                     </Card>
@@ -268,7 +365,7 @@ export default function Index({
                         <p className="text-3xl font-semibold text-gray-900 dark:text-white">
                             {formatPrice(subtotal)}
                         </p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                             Belanja sebelum diskon
                         </p>
                     </Card>
@@ -276,7 +373,7 @@ export default function Index({
                         <p className="text-3xl font-semibold text-gray-900 dark:text-white">
                             {formatPrice(change)}
                         </p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                             {remaining > 0
                                 ? `Kurang ${formatPrice(remaining)}`
                                 : "Siap diberikan ke pelanggan"}
@@ -291,7 +388,7 @@ export default function Index({
                             icon={<IconBarcode size={20} />}
                             footer={
                                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <p className="text-sm text-gray-500">
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
                                         {product
                                             ? `Stok tersedia: ${product.stock}`
                                             : "Scan barcode atau ketik manual"}
@@ -301,9 +398,8 @@ export default function Index({
                                         label="Tambahkan ke Keranjang"
                                         icon={<IconShoppingCartPlus size={18} />}
                                         disabled={quantityDisabled}
-                                        className={`border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900 w-full sm:w-auto ${
-                                            quantityDisabled ? 'opacity-50 cursor-not-allowed' : ''
-                                        }`}
+                                        variant="outline"
+                                        className="w-full sm:w-auto"
                                     />
                                 </div>
                             }
@@ -311,26 +407,102 @@ export default function Index({
                         >
                             <div className="grid gap-4 md:grid-cols-[2fr_1fr]">
                                 <div className="space-y-3">
-                                    <Input
-                                        type="text"
-                                        label="Scan / Input Barcode"
-                                        placeholder="Masukkan barcode produk"
-                                        value={barcode}
-                                        disabled={isSearching}
-                                        onChange={(event) =>
-                                            setBarcode(event.target.value)
-                                        }
-                                        onKeyDown={(event) =>
-                                            event.key === "Enter" &&
-                                            handleSearchProduct(event)
-                                        }
-                                    />
+                                    {/* Barcode input with autocomplete dropdown */}
+                                    <div className="relative" ref={inputRef}>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1.5">
+                                            Scan / Input Barcode
+                                        </label>
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Masukkan barcode atau nama produk"
+                                                value={barcode}
+                                                disabled={isSearching}
+                                                onChange={handleBarcodeChange}
+                                                onKeyDown={(event) => {
+                                                    if (event.key === "Enter") {
+                                                        event.preventDefault();
+                                                        setShowSuggestions(false);
+                                                        handleSearchProduct(event);
+                                                    } else if (event.key === "Escape") {
+                                                        setShowSuggestions(false);
+                                                    }
+                                                }}
+                                                onFocus={() => {
+                                                    if (suggestions.length > 0) {
+                                                        setShowSuggestions(true);
+                                                    }
+                                                }}
+                                                className="w-full px-3 py-2 pr-10 text-sm rounded-lg border transition-colors
+                                                    bg-white text-gray-900 border-gray-200 placeholder-gray-400
+                                                    focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent
+                                                    dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700 dark:placeholder-gray-500
+                                                    disabled:bg-gray-100 disabled:text-gray-500 dark:disabled:bg-gray-800 dark:disabled:text-gray-400"
+                                            />
+                                            <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                                {isFetchingSuggestions ? (
+                                                    <svg className="animate-spin h-4 w-4 text-gray-400 dark:text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                ) : barcode ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={resetProductForm}
+                                                        className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+                                                    >
+                                                        <IconX size={16} />
+                                                    </button>
+                                                ) : (
+                                                    <IconSearch size={16} className="text-gray-400 dark:text-gray-500" />
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Suggestions dropdown */}
+                                        {showSuggestions && suggestions.length > 0 && (
+                                            <div
+                                                ref={suggestionsRef}
+                                                className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-64 overflow-y-auto"
+                                            >
+                                                {suggestions.map((item) => (
+                                                    <button
+                                                        key={item.id}
+                                                        type="button"
+                                                        onClick={() => handleSelectSuggestion(item)}
+                                                        className="w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-b-0 transition-colors"
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="font-medium text-gray-900 dark:text-white text-sm">
+                                                                    {item.title}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                                    Barcode: {item.barcode}
+                                                                </p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="font-semibold text-indigo-600 dark:text-indigo-400 text-sm">
+                                                                    {formatPrice(item.sell_price)}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                                    Stok: {item.stock}
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
                                     <div className="flex gap-3">
                                         <Button
                                             type="button"
                                             onClick={handleSearchProduct}
                                             label={isSearching ? 'Mencari...' : 'Cari Produk'}
-                                            className="border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900 w-full"
+                                            variant="outline"
+                                            className="w-full"
                                             disabled={isSearching}
                                         />
                                         <Button
@@ -338,23 +510,23 @@ export default function Index({
                                             variant="secondary"
                                             onClick={resetProductForm}
                                             label="Reset"
-                                            className="border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900 w-full"
+                                            className="w-full"
                                         />
                                     </div>
                                 </div>
                                 <div className="rounded-lg border border-dashed border-gray-200 p-4 dark:border-gray-700">
                                     {product ? (
                                         <div className="space-y-2">
-                                            <p className="text-sm text-gray-500">
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
                                                 Produk terpilih
                                             </p>
                                             <h4 className="text-lg font-semibold text-gray-900 dark:text-white">
                                                 {product.title}
                                             </h4>
-                                            <p className="text-sm text-gray-500">
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
                                                 Harga jual
                                             </p>
-                                            <p className="text-xl font-semibold text-indigo-500">
+                                            <p className="text-xl font-semibold text-indigo-500 dark:text-indigo-400">
                                                 {formatPrice(
                                                     product.sell_price
                                                 )}
@@ -422,7 +594,7 @@ export default function Index({
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="flex h-full flex-col items-center justify-center text-center text-gray-500">
+                                        <div className="flex h-full flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400">
                                             <IconShoppingBag
                                                 size={36}
                                                 className="mb-2"
@@ -461,7 +633,7 @@ export default function Index({
                                         <tr>
                                             <Table.Td
                                                 colSpan={6}
-                                                className="py-6 text-center text-gray-500"
+                                                className="py-6 text-center text-gray-500 dark:text-gray-400"
                                             >
                                                 Keranjang masih kosong
                                             </Table.Td>
@@ -561,24 +733,24 @@ export default function Index({
                         >
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-500">
+                                    <span className="text-gray-500 dark:text-gray-400">
                                         Subtotal
                                     </span>
-                                    <span className="font-medium">
+                                    <span className="font-medium text-gray-900 dark:text-white">
                                         {formatPrice(subtotal)}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-500">
+                                    <span className="text-gray-500 dark:text-gray-400">
                                         Diskon
                                     </span>
-                                    <span className="font-medium text-rose-500">
+                                    <span className="font-medium text-rose-500 dark:text-rose-400">
                                         - {formatPrice(discount)}
                                     </span>
                                 </div>
                                 <div className="flex items-center justify-between text-base font-semibold">
-                                    <span>Total Bayar</span>
-                                    <span>{formatPrice(payable)}</span>
+                                    <span className="text-gray-900 dark:text-white">Total Bayar</span>
+                                    <span className="text-gray-900 dark:text-white">{formatPrice(payable)}</span>
                                 </div>
 
                                 <div className="grid gap-3">
@@ -621,7 +793,7 @@ export default function Index({
                                         }
                                     />
                                     {!isCashPayment && (
-                                        <p className="text-xs text-amber-600">
+                                        <p className="text-xs text-amber-600 dark:text-amber-500">
                                             Nominal mengikuti total tagihan
                                             saat membuat tautan pembayaran.
                                         </p>
@@ -673,8 +845,8 @@ export default function Index({
                                                             size={18}
                                                             className={
                                                                 isActive
-                                                                    ? "text-indigo-600"
-                                                                    : "text-gray-400"
+                                                                    ? "text-indigo-600 dark:text-indigo-400"
+                                                                    : "text-gray-400 dark:text-gray-500"
                                                             }
                                                         />
                                                     </div>
@@ -683,7 +855,7 @@ export default function Index({
                                         })}
                                     </div>
                                     {!isCashPayment && (
-                                        <p className="text-xs text-amber-600">
+                                        <p className="text-xs text-amber-600 dark:text-amber-500">
                                             Tautan pembayaran akan muncul di
                                             halaman invoice setelah transaksi
                                             dibuat.
@@ -693,23 +865,23 @@ export default function Index({
 
                                 <div className="rounded-lg bg-gray-50 p-4 dark:bg-gray-900/40">
                                     <div className="flex items-center justify-between text-sm">
-                                        <span className="text-gray-500">
+                                        <span className="text-gray-500 dark:text-gray-400">
                                             Metode
                                         </span>
-                                        <span className="font-medium">
+                                        <span className="font-medium text-gray-900 dark:text-white">
                                             {activePaymentOption?.label ??
                                                 "Tunai"}
                                         </span>
                                     </div>
                                     <div className="mt-2 flex items-center justify-between text-sm">
-                                        <span className="text-gray-500">
+                                        <span className="text-gray-500 dark:text-gray-400">
                                             {isCashPayment ? "Kembalian" : "Status"}
                                         </span>
                                         <span
                                             className={`font-semibold ${
                                                 isCashPayment
-                                                    ? "text-emerald-500"
-                                                    : "text-amber-500"
+                                                    ? "text-emerald-500 dark:text-emerald-400"
+                                                    : "text-amber-500 dark:text-amber-400"
                                             }`}
                                         >
                                             {isCashPayment
@@ -727,11 +899,8 @@ export default function Index({
                                     icon={<IconArrowRight size={18} />}
                                     onClick={handleSubmitTransaction}
                                     disabled={isSubmitDisabled}
-                                    className={`border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900 w-full ${
-                                        isSubmitDisabled
-                                            ? "opacity-50 cursor-not-allowed"
-                                            : ""
-                                    }`}
+                                    variant={isSubmitDisabled ? "secondary" : "primary"}
+                                    className="w-full"
                                 />
                             </div>
                         </Card>

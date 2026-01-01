@@ -83,7 +83,7 @@ export default function InputSelect({ selected, data = [], setSelected, label, e
                     leaveFrom="transform scale-100 opacity-100"
                     leaveTo="transform scale-95 opacity-0"
                 >
-                    <Listbox.Options className='absolute w-full z-20 mt-1 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg shadow-slate-200/50 dark:shadow-slate-900/50 max-h-60 overflow-y-auto'>
+                    <Listbox.Options className='absolute w-full z-50 mt-1 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg shadow-slate-200/50 dark:shadow-slate-900/50 max-h-60 overflow-y-auto'>
                         {searchable && (
                             <div className='px-2 pb-2 mb-2 border-b border-slate-200 dark:border-slate-700'>
                                 <div className='relative'>

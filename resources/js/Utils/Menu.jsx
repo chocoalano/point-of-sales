@@ -17,6 +17,7 @@ import {
     IconCreditCard,
     IconLayout2,
     IconBuildingWarehouse,
+    IconAdjustments,
 } from "@tabler/icons-react";
 import hasAnyPermission from "./Permission";
 import React from "react";
@@ -142,6 +143,13 @@ export default function Menu() {
                     href: route("reports.inventories.index"),
                     active: url.startsWith("/dashboard/reports/inventories"),
                     icon: <IconBuildingWarehouse size={20} strokeWidth={1.5} />,
+                    permissions: hasAnyPermission(["inventories-access"]),
+                },
+                {
+                    title: "Penyesuaian Stok",
+                    href: route("inventory-adjustments.index"),
+                    active: url.startsWith("/dashboard/inventory-adjustments"),
+                    icon: <IconAdjustments size={20} strokeWidth={1.5} />,
                     permissions: hasAnyPermission(["inventories-access"]),
                 },
             ],

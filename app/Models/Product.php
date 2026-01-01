@@ -38,6 +38,18 @@ class Product extends Model
         return $this->hasMany(PurchaseItem::class, 'product_id', 'id');
     }
 
+    // Inventory for this product
+    public function inventory()
+    {
+        return $this->hasOne(Inventory::class);
+    }
+
+    // Inventory adjustments for this product
+    public function inventoryAdjustments()
+    {
+        return $this->hasMany(InventoryAdjustment::class);
+    }
+
     // Transaction details for this product (hasMany for aggregation)
     public function transactionDetails()
     {

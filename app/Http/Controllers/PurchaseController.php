@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Product;
 use App\Models\Purchase;
+use App\Services\InventoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -10,6 +12,13 @@ use Inertia\Inertia;
 
 class PurchaseController extends Controller
 {
+    protected InventoryService $inventoryService;
+
+    public function __construct(InventoryService $inventoryService)
+    {
+        $this->inventoryService = $inventoryService;
+    }
+
     public function index(Request $request)
     {
         // Filters
@@ -113,7 +122,16 @@ class PurchaseController extends Controller
                     'expired' => $item['expired'] ?? null,
                     'currency' => $item['currency'] ?? 'IDR',
                 ]);
+
+                // Update product stock if product exists
+                if ($product) {
+                    $product->increment('stock', $item['quantity']);
+                }
             }
+
+            // Process inventory adjustment
+            $purchase->load('items.product');
+            $this->inventoryService->processPurchase($purchase);
 
             DB::commit();
 
@@ -126,9 +144,46 @@ class PurchaseController extends Controller
         }
     }
 
+    /**
+     * Display the specified purchase with full details.
+     */
+    public function show(Purchase $purchase)
+    {
+        $purchase->load([
+            'items.product.category',
+            'user',
+        ]);
+
+        // Get inventory adjustments related to this purchase
+        $inventoryAdjustments = \App\Models\InventoryAdjustment::where('reference_type', 'purchase')
+            ->where('reference_id', $purchase->id)
+            ->with(['product', 'user'])
+            ->get();
+
+        // Calculate totals
+        $totals = [
+            'subtotal' => $purchase->items->sum('total_price'),
+            'total_quantity' => $purchase->items->sum('quantity'),
+            'total_items' => $purchase->items->count(),
+            'total_tax' => $purchase->items->sum(function ($item) {
+                return $item->total_price * ($item->tax_percent / 100);
+            }),
+            'total_discount' => $purchase->items->sum(function ($item) {
+                $basePrice = $item->quantity * $item->purchase_price;
+                return $basePrice * ($item->discount_percent / 100);
+            }),
+        ];
+
+        return Inertia::render('Dashboard/Purchase/Show', [
+            'purchase' => $purchase,
+            'inventoryAdjustments' => $inventoryAdjustments,
+            'totals' => $totals,
+        ]);
+    }
+
     public function edit(Purchase $purchase)
     {
-        $products = \App\Models\Product::all();
+        $products = Product::all();
 
         return Inertia::render('Dashboard/Purchase/Edit', [
             'purchase' => $purchase->load('items.product'),
@@ -167,12 +222,26 @@ class PurchaseController extends Controller
             ]);
 
             // hapus semua item lama
+            $oldItems = $purchase->items()->with('product')->get();
+
+            // Reverse old stock changes
+            foreach ($oldItems as $oldItem) {
+                if ($oldItem->product_id) {
+                    $oldItem->product->decrement('stock', $oldItem->quantity);
+                }
+            }
+
+            // Delete old inventory adjustments
+            \App\Models\InventoryAdjustment::where('reference_type', 'purchase')
+                ->where('reference_id', $purchase->id)
+                ->delete();
+
             $purchase->items()->delete();
 
             // simpan ulang item
             foreach ($request->items as $item) {
                 // Find product by barcode to get product_id
-                $product = \App\Models\Product::where('barcode', $item['barcode'])->first();
+                $product = Product::where('barcode', $item['barcode'])->first();
 
                 $purchase->items()->create([
                     'product_id' => $product?->id,
@@ -188,7 +257,16 @@ class PurchaseController extends Controller
                     'expired' => $item['expired'] ?? null,
                     'currency' => $item['currency'] ?? 'IDR',
                 ]);
+
+                // Update product stock if product exists
+                if ($product) {
+                    $product->increment('stock', $item['quantity']);
+                }
             }
+
+            // Process inventory adjustment
+            $purchase->load('items.product');
+            $this->inventoryService->processPurchase($purchase);
 
             DB::commit();
 
@@ -203,13 +281,40 @@ class PurchaseController extends Controller
 
     public function destroy(Purchase $purchase)
     {
-        if ($purchase->invoice) {
-            Storage::delete('public/purchases/' . $purchase->invoice);
+        DB::beginTransaction();
+
+        try {
+            // Reverse inventory changes
+            $purchase->load('items.product');
+
+            foreach ($purchase->items as $item) {
+                if ($item->product_id) {
+                    $item->product->decrement('stock', $item->quantity);
+                }
+            }
+
+            // Reverse inventory adjustments
+            $this->inventoryService->reversePurchase($purchase);
+
+            // Delete inventory adjustments
+            \App\Models\InventoryAdjustment::where('reference_type', 'purchase')
+                ->where('reference_id', $purchase->id)
+                ->delete();
+
+            if ($purchase->invoice) {
+                Storage::delete('public/purchases/' . $purchase->invoice);
+            }
+
+            $purchase->delete();
+
+            DB::commit();
+
+            return to_route('purchase.index')
+                ->with('success', 'Purchase deleted successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            return back()->withErrors(['error' => 'Gagal menghapus pembelian: ' . $e->getMessage()]);
         }
-
-        $purchase->delete();
-
-        return to_route('purchase.index')
-            ->with('success', 'Purchase deleted successfully.');
     }
 }

@@ -158,11 +158,12 @@ export default function Edit({ purchase, products }) {
     };
 
     const formatCurrency = (value) => {
+        const num = Number(value);
         return new Intl.NumberFormat('id-ID', {
             style: 'currency',
             currency: 'IDR',
             minimumFractionDigits: 0,
-        }).format(value || 0);
+        }).format(isNaN(num) ? 0 : num);
     };
 
     const handleSubmit = (e) => {

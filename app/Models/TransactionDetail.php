@@ -15,7 +15,7 @@ class TransactionDetail extends Model
      * @var array
      */
     protected $fillable = [
-        'transaction_id', 'product_id', 'quantity','discount', 'price' // ubah barcode jadi product_id
+        'transaction_id', 'product_id', 'barcode', 'quantity', 'discount', 'price'
     ];
 
     /**
