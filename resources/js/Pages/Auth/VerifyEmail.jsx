@@ -13,30 +13,29 @@ export default function VerifyEmail({ status }) {
 
     return (
         <GuestLayout>
-            <Head title="Email Verification" />
+            <Head title="Verifikasi Email" />
 
-            <div className="mb-4 text-sm text-gray-600">
-                Thanks for signing up! Before getting started, could you verify your email address by clicking on the
-                link we just emailed to you? If you didn't receive the email, we will gladly send you another.
+            <div className="mb-4 text-sm text-slate-600 dark:text-slate-400">
+                Terima kasih telah mendaftar! Sebelum memulai, silakan verifikasi alamat email Anda dengan mengklik link yang telah kami kirimkan. Jika Anda tidak menerima email tersebut, kami akan dengan senang hati mengirimkan yang baru.
             </div>
 
             {status === 'verification-link-sent' && (
-                <div className="mb-4 font-medium text-sm text-green-600">
-                    A new verification link has been sent to the email address you provided during registration.
+                <div className="mb-4 font-medium text-sm text-emerald-600 dark:text-emerald-400">
+                    Link verifikasi baru telah dikirim ke alamat email yang Anda daftarkan.
                 </div>
             )}
 
             <form onSubmit={submit}>
                 <div className="mt-4 flex items-center justify-between">
-                    <PrimaryButton disabled={processing}>Resend Verification Email</PrimaryButton>
+                    <PrimaryButton disabled={processing}>Kirim Ulang Email Verifikasi</PrimaryButton>
 
                     <Link
                         href={route('logout')}
                         method="post"
                         as="button"
-                        className="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 underline rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-slate-800"
                     >
-                        Log Out
+                        Keluar
                     </Link>
                 </div>
             </form>

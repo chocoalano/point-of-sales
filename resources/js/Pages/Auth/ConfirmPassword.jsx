@@ -25,10 +25,10 @@ export default function ConfirmPassword() {
 
     return (
         <GuestLayout>
-            <Head title="Confirm Password" />
+            <Head title="Konfirmasi Password" />
 
-            <div className="mb-4 text-sm text-gray-600">
-                This is a secure area of the application. Please confirm your password before continuing.
+            <div className="mb-4 text-sm text-slate-600 dark:text-slate-400">
+                Ini adalah area aman dari aplikasi. Silakan konfirmasi password Anda sebelum melanjutkan.
             </div>
 
             <form onSubmit={submit}>
@@ -40,17 +40,17 @@ export default function ConfirmPassword() {
                         type="password"
                         name="password"
                         value={data.password}
-                        className="mt-1 block w-full"
                         isFocused={true}
                         onChange={(e) => setData('password', e.target.value)}
+                        placeholder="Masukkan password Anda"
                     />
 
-                    <InputError message={errors.password} className="mt-2" />
+                    <InputError message={errors.password} />
                 </div>
 
-                <div className="flex items-center justify-end mt-4">
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Confirm
+                <div className="flex items-center justify-end mt-6">
+                    <PrimaryButton disabled={processing}>
+                        Konfirmasi
                     </PrimaryButton>
                 </div>
             </form>

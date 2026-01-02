@@ -12,18 +12,30 @@ class CustomerController extends Controller
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Http\Response
+     * @return \Inertia\Response
      */
-    public function index()
+    public function index(Request $request)
     {
-        //get customers
-        $customers = Customer::when(request()->search, function ($customers) {
-            $customers = $customers->where('name', 'like', '%' . request()->search . '%');
-        })->latest()->paginate(5);
+        // Get per_page from request, default to 10
+        $perPage = $request->input('per_page', 10);
 
-        //return inertia
+        // Validate per_page value
+        $perPage = in_array($perPage, [5, 10, 25, 50, 100]) ? $perPage : 10;
+
+        // Get customers with search filter
+        $customers = Customer::when($request->search, function ($query, $search) {
+            $query->where('name', 'like', '%' . $search . '%')
+                  ->orWhere('no_telp', 'like', '%' . $search . '%')
+                  ->orWhere('address', 'like', '%' . $search . '%');
+        })->latest()->paginate($perPage)->withQueryString();
+
+        // Return inertia with filters
         return Inertia::render('Dashboard/Customers/Index', [
             'customers' => $customers,
+            'filters' => [
+                'search' => $request->search ?? '',
+                'per_page' => (string) $perPage,
+            ],
         ]);
     }
 

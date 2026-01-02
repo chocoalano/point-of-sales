@@ -68,37 +68,37 @@ export default function Button({ className, icon, label, type, href, added, url,
         <>
             {type === 'link' &&
                 <Link href={href} className={buttonClass}>
-                    {icon} <span className={`${added === true ? 'hidden lg:block' : ''}`}>{label}</span>
+                    {icon} {label && <span className={`${added === true ? 'hidden lg:block' : ''}`}>{label}</span>}
                 </Link>
             }
             {type === 'button' &&
                 <button className={buttonClass} {...props}>
-                    {icon} <span className={`${added === true ? 'hidden md:block' : ''}`}>{label}</span>
+                    {icon} {label && <span className={`${added === true ? 'hidden md:block' : ''}`}>{label}</span>}
                 </button>
             }
             {type === 'submit' &&
                 <button type='submit' className={buttonClass} {...props}>
-                    {icon} <span className={`${added === true ? 'hidden lg:block' : ''}`}>{label}</span>
+                    {icon} {label && <span className={`${added === true ? 'hidden lg:block' : ''}`}>{label}</span>}
                 </button>
             }
             {type === 'delete' &&
                 <button onClick={() => deleteData(url)} className={`${baseStyles} ${sizes.sm} ${variants.danger} ${className || ''}`} {...props}>
-                    {icon}
+                    {icon} {label && <span className='hidden sm:block'>{label}</span>}
                 </button>
             }
             {type === 'modal' &&
                 <button className={buttonClass} {...props}>
-                    {icon}
+                    {icon} {label && <span>{label}</span>}
                 </button>
             }
             {type === 'edit' &&
                 <Link href={href} className={`${baseStyles} ${sizes.sm} ${variants.warning} ${className || ''}`} {...props}>
-                    {icon}
+                    {icon} {label && <span className='hidden sm:block'>{label}</span>}
                 </Link>
             }
             {type === 'bulk' &&
                 <button {...props} className={buttonClass}>
-                    {icon} <span className={`${added === true ? 'hidden lg:block' : ''}`}>{label}</span>
+                    {icon} {label && <span className={`${added === true ? 'hidden lg:block' : ''}`}>{label}</span>}
                 </button>
             }
         </>

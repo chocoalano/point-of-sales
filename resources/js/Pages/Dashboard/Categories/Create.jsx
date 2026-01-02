@@ -17,7 +17,6 @@ export default function Create() {
         description: '',
         image: '',
     })
-
     const handleImageChange = (e) => {
         const image = e.target.files[0]
         setData('image', image)
@@ -54,14 +53,15 @@ export default function Create() {
         <>
             <Head title='Tambah Data Kategori' />
             <Card
-                title={'Tambah Data Pengguna'}
+                title={'Tambah Data Kategori'}
                 icon={<IconUsersPlus size={20} strokeWidth={1.5} />}
                 footer={
                     <Button
                         type={'submit'}
                         label={'Simpan'}
+                        variant={'primary'}
                         icon={<IconPencilPlus size={20} strokeWidth={1.5} />}
-                        className={'border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900'}
+                        disabled={processing}
                     />
                 }
                 form={submit}
@@ -70,9 +70,8 @@ export default function Create() {
                     <div className='col-span-12'>
                         <Input
                             name='image'
-                            label={'Image'}
+                            label={'Gambar'}
                             type={'file'}
-                            placeholder={'Gambar kategori'}
                             errors={errors.image}
                             onChange={handleImageChange}
                         />
@@ -80,9 +79,10 @@ export default function Create() {
                     <div className='col-span-12'>
                         <Input
                             name='name'
-                            label={'Name'}
+                            label={'Nama Kategori'}
                             type={'text'}
-                            placeholder={'Nama kategori'}
+                            placeholder={'Masukkan nama kategori'}
+                            value={data.name}
                             errors={errors.name}
                             onChange={e => setData('name', e.target.value)}
                         />
@@ -90,9 +90,9 @@ export default function Create() {
                     <div className='col-span-12'>
                         <Textarea
                             name='description'
-                            label={'Description'}
-                            type={'text'}
-                            placeholder={'Deskripsi kategori'}
+                            label={'Deskripsi'}
+                            placeholder={'Deskripsi kategori (opsional)'}
+                            value={data.description}
                             errors={errors.description}
                             onChange={e => setData('description', e.target.value)}
                         />

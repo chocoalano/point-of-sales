@@ -398,8 +398,7 @@ export default function Index({
                                         label="Tambahkan ke Keranjang"
                                         icon={<IconShoppingCartPlus size={18} />}
                                         disabled={quantityDisabled}
-                                        variant="outline"
-                                        className="w-full sm:w-auto"
+                                        variant={quantityDisabled ? "secondary" : "primary"}
                                     />
                                 </div>
                             }
@@ -501,16 +500,15 @@ export default function Index({
                                             type="button"
                                             onClick={handleSearchProduct}
                                             label={isSearching ? 'Mencari...' : 'Cari Produk'}
-                                            variant="outline"
-                                            className="w-full"
+                                            icon={<IconSearch size={16} />}
+                                            variant="primary"
                                             disabled={isSearching}
                                         />
                                         <Button
                                             type="button"
-                                            variant="secondary"
+                                            variant="outline"
                                             onClick={resetProductForm}
                                             label="Reset"
-                                            className="w-full"
                                         />
                                     </div>
                                 </div>
@@ -676,7 +674,7 @@ export default function Index({
                                                         "transactions.destroyCart",
                                                         item.id
                                                     )}
-                                                    className="border border-rose-200 bg-rose-100 text-rose-500 hover:bg-rose-200 dark:border-rose-800 dark:bg-rose-950"
+                                                    variant="danger"
                                                 />
                                             </Table.Td>
                                         </tr>

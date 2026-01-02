@@ -67,16 +67,15 @@ export default function Index() {
                             type={'link'}
                             href={route('users.create')}
                             icon={<IconCirclePlus size={20} strokeWidth={1.5} />}
-                            className={'bg-white text-gray-700 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200'}
+                            variant={'outline'}
                             label={'Tambah Data Pengguna'}
-                            onClick={() => setData('isOpen', true)}
                             added={true}
                         />
                         {data.selectedUser.length > 0 &&
                             <Button
                                 type={'bulk'}
                                 icon={<IconTrash size={20} strokeWidth={1.5} />}
-                                className={'border bg-rose-100 border-rose-300 text-rose-500 hover:bg-rose-200 dark:bg-rose-950  dark:border-gray-800 dark:hover:bg-rose-900'}
+                                variant={'danger'}
                                 label={`Hapus ${data.selectedUser.length} data yang dipilih`}
                                 added={true}
                                 onClick={() => deleteData(data.selectedUser)}
@@ -146,13 +145,11 @@ export default function Index() {
                                             <Button
                                                 type={'edit'}
                                                 icon={<IconPencilCog size={16} strokeWidth={1.5} />}
-                                                className={'border bg-orange-100 border-orange-300 text-orange-500 hover:bg-orange-200 dark:bg-orange-950 dark:border-orange-800 dark:text-gray-300  dark:hover:bg-orange-900'}
                                                 href={route('users.edit', user.id)}
                                             />
                                             <Button
                                                 type={'delete'}
                                                 icon={<IconTrash size={16} strokeWidth={1.5} />}
-                                                className={'border bg-rose-100 border-rose-300 text-rose-500 hover:bg-rose-200 dark:bg-rose-950 dark:border-rose-800 dark:text-gray-300  dark:hover:bg-rose-900'}
                                                 url={route('users.destroy', user.id)}
                                             />
                                         </div>

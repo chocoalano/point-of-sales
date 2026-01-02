@@ -1,6 +1,9 @@
 import React from 'react'
 
 export default function Input({ label, type, className, errors, value, ...props }) {
+    // File input tidak bisa controlled, jadi jangan pass value untuk type file
+    const isFileInput = type === 'file'
+
     return (
         <div className='flex flex-col gap-1.5'>
             {label && (
@@ -18,9 +21,10 @@ export default function Input({ label, type, className, errors, value, ...props 
                     hover:border-slate-300 dark:hover:border-slate-600
                     focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400
                     disabled:opacity-50 disabled:cursor-not-allowed
+                    ${isFileInput ? 'file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-slate-700 dark:file:text-slate-200' : ''}
                     ${errors ? 'border-red-500 dark:border-red-500 focus:ring-red-500/20' : ''}
-                    ${className}`}
-                value={value ?? ''}
+                    ${className || ''}`}
+                {...(!isFileInput && value !== undefined ? { value } : {})}
                 {...props}
             />
             {errors && (
