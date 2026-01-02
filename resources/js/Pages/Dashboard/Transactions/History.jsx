@@ -10,12 +10,24 @@ import {
     IconDatabaseOff,
     IconSearch,
     IconClockHour6,
+    IconEye,
 } from "@tabler/icons-react";
 
 const defaultFilters = {
     invoice: "",
     start_date: "",
     end_date: "",
+};
+
+// Helper to sanitize filter values (convert null/undefined to empty string)
+const sanitizeFilters = (filters) => {
+    const sanitized = { ...defaultFilters };
+    if (filters) {
+        Object.keys(defaultFilters).forEach((key) => {
+            sanitized[key] = filters[key] ?? "";
+        });
+    }
+    return sanitized;
 };
 
 const formatCurrency = (value = 0) =>
@@ -26,16 +38,10 @@ const formatCurrency = (value = 0) =>
     }).format(value);
 
 const History = ({ transactions, filters }) => {
-    const [filterData, setFilterData] = useState({
-        ...defaultFilters,
-        ...filters,
-    });
+    const [filterData, setFilterData] = useState(() => sanitizeFilters(filters));
 
     useEffect(() => {
-        setFilterData({
-            ...defaultFilters,
-            ...filters,
-        });
+        setFilterData(sanitizeFilters(filters));
     }, [filters]);
 
     const handleChange = (field, value) => {
@@ -82,14 +88,14 @@ const History = ({ transactions, filters }) => {
                             <Button
                                 type="button"
                                 label="Reset"
-                                className="border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900"
+                                variant="outline"
                                 onClick={resetFilters}
                             />
                             <Button
                                 type="submit"
                                 label="Cari"
                                 icon={<IconSearch size={18} />}
-                                className="border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900"
+                                variant="primary"
                             />
                         </div>
                     }
@@ -146,6 +152,9 @@ const History = ({ transactions, filters }) => {
                                 <Table.Th className="text-right">
                                     Profit
                                 </Table.Th>
+                                <Table.Th className="w-24 text-center">
+                                    Aksi
+                                </Table.Th>
                             </tr>
                         </Table.Thead>
                         <Table.Tbody>
@@ -190,11 +199,26 @@ const History = ({ transactions, filters }) => {
                                                 transaction.total_profit ?? 0
                                             )}
                                         </Table.Td>
+                                        <Table.Td className="text-center">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                icon={<IconEye size={16} />}
+                                                onClick={() =>
+                                                    router.get(
+                                                        route(
+                                                            "transactions.show",
+                                                            transaction.invoice
+                                                        )
+                                                    )
+                                                }
+                                            />
+                                        </Table.Td>
                                     </tr>
                                 ))
                             ) : (
                                 <Table.Empty
-                                    colSpan={9}
+                                    colSpan={10}
                                     message={
                                         <div className="text-gray-500">
                                             <IconDatabaseOff

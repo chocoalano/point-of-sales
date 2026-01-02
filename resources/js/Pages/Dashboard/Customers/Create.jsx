@@ -55,29 +55,32 @@ export default function Create() {
                     <Button
                         type={'submit'}
                         label={'Simpan'}
+                        variant={'primary'}
                         icon={<IconPencilPlus size={20} strokeWidth={1.5} />}
-                        className={'border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900'}
+                        disabled={processing}
                     />
                 }
                 form={submit}
             >
                 <div className='grid grid-cols-12 gap-4'>
-                    <div className='col-span-6'>
+                    <div className='col-span-12 md:col-span-6'>
                         <Input
                             name='name'
-                            label={'Name'}
+                            label={'Nama'}
                             type={'text'}
                             placeholder={'Nama pelanggan'}
+                            value={data.name}
                             errors={errors.name}
                             onChange={e => setData('name', e.target.value)}
                         />
                     </div>
-                    <div className="col-span-6">
+                    <div className="col-span-12 md:col-span-6">
                         <Input
                             name='no_telp'
                             label={'No. Handphone'}
-                            type={'text'}
-                            placeholder={'No. Handphone pelanggan'}
+                            type={'tel'}
+                            placeholder={'Contoh: 08123456789'}
+                            value={data.no_telp}
                             errors={errors.no_telp}
                             onChange={e => setData('no_telp', e.target.value)}
                         />
@@ -85,9 +88,9 @@ export default function Create() {
                     <div className="col-span-12">
                         <Textarea
                             name='address'
-                            label={'Address'}
-                            type={'text'}
-                            placeholder={'Alamat pelanggan'}
+                            label={'Alamat'}
+                            placeholder={'Alamat lengkap pelanggan'}
+                            value={data.address}
                             errors={errors.address}
                             onChange={e => setData('address', e.target.value)}
                         />

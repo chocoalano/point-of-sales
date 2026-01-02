@@ -222,7 +222,7 @@ export default function Payment({ setting, supportedGateways = [] }) {
                     <Button
                         type="submit"
                         label="Simpan Konfigurasi"
-                        className="bg-indigo-600 text-white hover:bg-indigo-500"
+                        variant="primary"
                         disabled={processing}
                     />
                 </div>

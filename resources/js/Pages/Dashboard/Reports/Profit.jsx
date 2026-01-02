@@ -169,13 +169,13 @@ const ProfitReport = ({
                             <Button
                                 type="button"
                                 label="Reset"
-                                className="border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900"
+                                variant="outline"
                                 onClick={resetFilters}
                             />
                             <Button
                                 type="submit"
                                 label="Terapkan Filter"
-                                className="border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900"
+                                variant="primary"
                                 icon={<IconArrowDownRight size={18} />}
                             />
                         </div>

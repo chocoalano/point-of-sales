@@ -80,8 +80,9 @@ export default function Edit({ categories, product }) {
                     <Button
                         type={'submit'}
                         label={'Ubah'}
+                        variant={'primary'}
                         icon={<IconPencilPlus size={20} strokeWidth={1.5} />}
-                        className={'border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900'}
+                        disabled={processing}
                     />
                 }
                 form={submit}
@@ -94,7 +95,6 @@ export default function Edit({ categories, product }) {
                             label={'Gambar'}
                             onChange={handleImageChange}
                             errors={errors.image}
-                            placeholder={'Gambar produk'}
                         />
                     </div>
                     <div className='col-span-12'>
@@ -120,7 +120,7 @@ export default function Edit({ categories, product }) {
                             placeholder={'Barcode'}
                         />
                     </div>
-                    <div className='col-span-6'>
+                    <div className='col-span-12 md:col-span-6'>
                         <Input
                             type={'text'}
                             label={'Nama'}
@@ -130,7 +130,7 @@ export default function Edit({ categories, product }) {
                             placeholder={'Nama produk'}
                         />
                     </div>
-                    <div className='col-span-6'>
+                    <div className='col-span-12 md:col-span-6'>
                         <Input
                             type={'number'}
                             label={'Stok'}
@@ -138,20 +138,20 @@ export default function Edit({ categories, product }) {
                             onChange={e => setData('stock', e.target.value)}
                             errors={errors.stock}
                             placeholder={'Stok tersedia'}
+                            min={0}
                         />
                     </div>
                     <div className='col-span-12'>
                         <Textarea
                             name='description'
                             label={'Deskripsi'}
-                            type={'text'}
                             placeholder={'Deskripsi produk'}
                             errors={errors.description}
                             onChange={e => setData('description', e.target.value)}
                             value={data.description}
                         />
                     </div>
-                    <div className='col-span-6'>
+                    <div className='col-span-12 md:col-span-6'>
                         <Input
                             type={'number'}
                             label={'Harga Beli'}
@@ -159,9 +159,10 @@ export default function Edit({ categories, product }) {
                             onChange={e => setData('buy_price', e.target.value)}
                             errors={errors.buy_price}
                             placeholder={'Harga beli produk'}
+                            min={0}
                         />
                     </div>
-                    <div className='col-span-6'>
+                    <div className='col-span-12 md:col-span-6'>
                         <Input
                             type={'number'}
                             label={'Harga Jual'}
@@ -169,6 +170,7 @@ export default function Edit({ categories, product }) {
                             onChange={e => setData('sell_price', e.target.value)}
                             errors={errors.sell_price}
                             placeholder={'Harga jual produk'}
+                            min={0}
                         />
                     </div>
                 </div>

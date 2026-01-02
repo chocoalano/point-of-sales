@@ -43,21 +43,18 @@ export default function Register() {
 
                         <form onSubmit={submit} className="space-y-5">
                             <div>
-                                <InputLabel htmlFor="name" value="Name" />
+                                <InputLabel htmlFor="name" value="Nama Lengkap" />
                                 <TextInput
                                     id="name"
                                     name="name"
                                     value={data.name}
-                                    className="mt-1 block w-full border-gray-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 focus:ring-neutral-700 focus:border-neutral-700"
                                     onChange={(e) =>
                                         setData("name", e.target.value)
                                     }
+                                    placeholder="Masukkan nama lengkap"
                                     required
                                 />
-                                <InputError
-                                    message={errors.name}
-                                    className="mt-2"
-                                />
+                                <InputError message={errors.name} />
                             </div>
 
                             <div>
@@ -67,16 +64,13 @@ export default function Register() {
                                     type="email"
                                     name="email"
                                     value={data.email}
-                                    className="mt-1 block w-full border-gray-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 focus:ring-neutral-700 focus:border-neutral-700"
                                     onChange={(e) =>
                                         setData("email", e.target.value)
                                     }
+                                    placeholder="Masukkan email"
                                     required
                                 />
-                                <InputError
-                                    message={errors.email}
-                                    className="mt-2"
-                                />
+                                <InputError message={errors.email} />
                             </div>
 
                             <div>
@@ -89,56 +83,47 @@ export default function Register() {
                                     type="password"
                                     name="password"
                                     value={data.password}
-                                    className="mt-1 block w-full border-gray-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 focus:ring-neutral-700 focus:border-neutral-700"
                                     onChange={(e) =>
                                         setData("password", e.target.value)
                                     }
+                                    placeholder="Masukkan password"
                                     required
                                 />
-                                <InputError
-                                    message={errors.password}
-                                    className="mt-2"
-                                />
+                                <InputError message={errors.password} />
                             </div>
 
                             <div>
                                 <InputLabel
                                     htmlFor="password_confirmation"
-                                    value="Confirm Password"
+                                    value="Konfirmasi Password"
                                 />
                                 <TextInput
                                     id="password_confirmation"
                                     type="password"
                                     name="password_confirmation"
                                     value={data.password_confirmation}
-                                    className="mt-1 block w-full border-gray-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 focus:ring-neutral-700 focus:border-neutral-700"
                                     onChange={(e) =>
                                         setData(
                                             "password_confirmation",
                                             e.target.value
                                         )
                                     }
+                                    placeholder="Konfirmasi password"
                                     required
                                 />
-                                <InputError
-                                    message={errors.password_confirmation}
-                                    className="mt-2"
-                                />
+                                <InputError message={errors.password_confirmation} />
                             </div>
 
                             <div className="flex items-center justify-between">
                                 <Link
                                     href={route("login")}
-                                    className="text-sm text-neutral-800 dark:text-neutral-300 hover:underline"
+                                    className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:underline"
                                 >
                                     Sudah punya akun?
                                 </Link>
 
-                                <PrimaryButton
-                                    className="px-6"
-                                    disabled={processing}
-                                >
-                                    Register
+                                <PrimaryButton disabled={processing}>
+                                    Daftar
                                 </PrimaryButton>
                             </div>
                         </form>

@@ -3,48 +3,54 @@
 namespace App\Http\Controllers\Apps;
 
 use Inertia\Inertia;
+use Inertia\Response;
 use App\Models\Category;
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Storage;
 
 class CategoryController extends Controller
 {
     /**
      * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request): Response
     {
-        //get categories
-        $categories = Category::when(request()->search, function ($categories) {
-            $categories = $categories->where('name', 'like', '%' . request()->search . '%');
-        })->latest()->paginate(2);
+        // Get per_page from request, default to 10
+        $perPage = $request->input('per_page', 10);
 
-        //return inertia
+        // Validate per_page value
+        $perPage = in_array($perPage, [5, 10, 25, 50, 100]) ? $perPage : 10;
+
+        // Get categories with search filter
+        $categories = Category::when($request->search, function ($query, $search) {
+            $query->where('name', 'like', '%' . $search . '%')
+                  ->orWhere('description', 'like', '%' . $search . '%');
+        })->latest()->paginate($perPage)->withQueryString();
+
+        // Return inertia with filters
         return Inertia::render('Dashboard/Categories/Index', [
             'categories' => $categories,
+            'filters' => [
+                'search' => $request->search ?? '',
+                'per_page' => (string) $perPage,
+            ],
         ]);
     }
 
     /**
      * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
      */
-    public function create()
+    public function create(): Response
     {
         return Inertia::render('Dashboard/Categories/Create');
     }
 
     /**
      * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
      */
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         /**
          * validate
@@ -77,11 +83,8 @@ class CategoryController extends Controller
 
     /**
      * Show the form for editing the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
      */
-    public function edit(Category $category)
+    public function edit(Category $category): Response
     {
         return Inertia::render('Dashboard/Categories/Edit', [
             'category' => $category,
@@ -90,12 +93,8 @@ class CategoryController extends Controller
 
     /**
      * Update the specified resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, Category $category)
+    public function update(Request $request, Category $category): RedirectResponse
     {
         /**
          * validate
@@ -135,11 +134,8 @@ class CategoryController extends Controller
 
     /**
      * Remove the specified resource from storage.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy($id): RedirectResponse
     {
         //find by ID
         $category = Category::findOrFail($id);

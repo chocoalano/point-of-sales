@@ -75,7 +75,7 @@ export default function Index() {
                     <Button
                         type={'button'}
                         icon={<IconCirclePlus size={20} strokeWidth={1.5} />}
-                        className={'border bg-white text-gray-700 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200'}
+                        variant={'outline'}
                         label={'Tambah Data Akses Group'}
                         onClick={() => setData('isOpen', true)}
                         added={true}
@@ -125,7 +125,7 @@ export default function Index() {
                     <Button
                         type={'submit'}
                         icon={<IconPencilCheck size={20} strokeWidth={1.5} />}
-                        className={'border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200'}
+                        variant={'primary'}
                         added={true}
                         label={'Simpan'}
                     />

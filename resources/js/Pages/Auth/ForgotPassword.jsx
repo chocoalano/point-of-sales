@@ -17,31 +17,33 @@ export default function ForgotPassword({ status }) {
 
     return (
         <GuestLayout>
-            <Head title="Forgot Password" />
+            <Head title="Lupa Password" />
 
-            <div className="mb-4 text-sm text-gray-600">
-                Forgot your password? No problem. Just let us know your email address and we will email you a password
-                reset link that will allow you to choose a new one.
+            <div className="mb-4 text-sm text-slate-600 dark:text-slate-400">
+                Lupa password Anda? Tidak masalah. Masukkan alamat email Anda dan kami akan mengirimkan link reset password.
             </div>
 
-            {status && <div className="mb-4 font-medium text-sm text-green-600">{status}</div>}
+            {status && <div className="mb-4 font-medium text-sm text-emerald-600 dark:text-emerald-400">{status}</div>}
 
             <form onSubmit={submit}>
-                <TextInput
-                    id="email"
-                    type="email"
-                    name="email"
-                    value={data.email}
-                    className="mt-1 block w-full"
-                    isFocused={true}
-                    onChange={(e) => setData('email', e.target.value)}
-                />
+                <div>
+                    <InputLabel htmlFor="email" value="Email" />
+                    <TextInput
+                        id="email"
+                        type="email"
+                        name="email"
+                        value={data.email}
+                        isFocused={true}
+                        onChange={(e) => setData('email', e.target.value)}
+                        placeholder="Masukkan email Anda"
+                    />
 
-                <InputError message={errors.email} className="mt-2" />
+                    <InputError message={errors.email} />
+                </div>
 
-                <div className="flex items-center justify-end mt-4">
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Email Password Reset Link
+                <div className="flex items-center justify-end mt-6">
+                    <PrimaryButton disabled={processing}>
+                        Kirim Link Reset Password
                     </PrimaryButton>
                 </div>
             </form>

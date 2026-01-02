@@ -54,7 +54,7 @@ export default function Create({ category }) {
 
     return (
         <>
-            <Head title='Tambah Data Kategori' />
+            <Head title='Edit Data Kategori' />
             <Card
                 title={'Edit Kategori'}
                 icon={<IconUsersPlus size={20} strokeWidth={1.5} />}
@@ -62,8 +62,9 @@ export default function Create({ category }) {
                     <Button
                         type={'submit'}
                         label={'Simpan'}
+                        variant={'primary'}
                         icon={<IconPencilPlus size={20} strokeWidth={1.5} />}
-                        className={'border bg-white text-gray-700 hover:bg-gray-100 dark:bg-gray-950 dark:border-gray-800 dark:text-gray-200 dark:hover:bg-gray-900'}
+                        disabled={processing}
                     />
                 }
                 form={submit}
@@ -72,9 +73,8 @@ export default function Create({ category }) {
                     <div className='col-span-12'>
                         <Input
                             name='image'
-                            label={'Image'}
+                            label={'Gambar'}
                             type={'file'}
-                            placeholder={'Gambar kategori'}
                             errors={errors.image}
                             onChange={handleImageChange}
                         />
@@ -82,9 +82,9 @@ export default function Create({ category }) {
                     <div className='col-span-12'>
                         <Input
                             name='name'
-                            label={'Name'}
+                            label={'Nama Kategori'}
                             type={'text'}
-                            placeholder={'Nama kategori'}
+                            placeholder={'Masukkan nama kategori'}
                             errors={errors.name}
                             onChange={e => setData('name', e.target.value)}
                             value={data.name}
@@ -93,9 +93,8 @@ export default function Create({ category }) {
                     <div className='col-span-12'>
                         <Textarea
                             name='description'
-                            label={'Description'}
-                            type={'text'}
-                            placeholder={'Deskripsi kategori'}
+                            label={'Deskripsi'}
+                            placeholder={'Deskripsi kategori (opsional)'}
                             errors={errors.description}
                             onChange={e => setData('description', e.target.value)}
                             value={data.description}

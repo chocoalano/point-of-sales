@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 class Category extends Model
 {
     use HasFactory;
-    
+
     /**
      * fillable
      *
@@ -37,7 +37,7 @@ class Category extends Model
     protected function image(): Attribute
     {
         return Attribute::make(
-            get: fn ($value) => asset('/storage/category/' . $value),
+            get: fn ($value) => $value ? asset('/storage/category/' . $value) : null,
         );
     }
 }
