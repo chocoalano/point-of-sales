@@ -3,49 +3,108 @@
 namespace App\Services;
 
 use App\Models\Inventory;
-use App\Models\InventoryAdjustment;
 use App\Models\Product;
 use App\Models\Purchase;
-use App\Models\PurchaseItem;
-use App\Models\Transaction;
-use App\Models\TransactionDetail;
+use App\Models\InventoryAdjustment;
 use Illuminate\Support\Facades\DB;
 
 class InventoryService
 {
     /**
-     * Process inventory for a purchase (increase stock)
+     * SATU-SATUNYA pintu perubahan stok (LOW LEVEL)
      */
-    public function processPurchase(Purchase $purchase): void
-    {
-        DB::transaction(function () use ($purchase) {
-            foreach ($purchase->items as $item) {
-                if (!$item->product_id) continue;
+    public static function record(
+        int $productId,
+        string $type,
+        float $qty,
+        ?string $note = null,
+        ?string $referenceType = null,
+        ?int $referenceId = null,
+        ?int $userId = null
+    ): void {
+        DB::transaction(function () use (
+            $productId,
+            $type,
+            $qty,
+            $note,
+            $referenceType,
+            $referenceId,
+            $userId
+        ) {
+            $product = Product::lockForUpdate()->findOrFail($productId);
 
-                $inventory = Inventory::getOrCreateForProduct($item->product);
+            $qtyIn = 0;
+            $qtyOut = 0;
 
-                $inventory->addStock(
-                    quantity: $item->quantity,
-                    type: InventoryAdjustment::TYPE_PURCHASE,
-                    reason: "Purchase from {$purchase->supplier_name}",
-                    referenceType: 'purchase',
-                    referenceId: $purchase->id
-                );
+            if (in_array($type, [
+                'purchase',
+                'return',
+                'adjustment_in',
+            ])) {
+                $qtyIn = $qty;
+            } else {
+                $qtyOut = $qty;
             }
+
+            InventoryAdjustment::create([
+                'product_id'    => $productId,
+                'type'          => $type,
+                'qty_in'        => $qtyIn,
+                'qty_out'       => $qtyOut,
+                'stock_before'  => $product->stock,
+                'stock_after'   => ($product->stock + $qtyIn) - $qtyOut,
+                'note'          => $note,
+                'reference_type' => $referenceType,
+                'reference_id'  => $referenceId,
+                'user_id'       => $userId,
+            ]);
+
+            $product->update([
+                'stock' => ($product->stock + $qtyIn) - $qtyOut
+            ]);
         });
     }
 
     /**
-     * Reverse inventory for a purchase (when deleted/cancelled)
+     * JURNAL PEMBELIAN (HIGH LEVEL)
      */
+    public function processPurchase(Purchase $purchase): void
+    {
+        foreach ($purchase->items as $item) {
+            if (!$item->product_id) {
+                continue;
+            }
+
+            self::record(
+                productId: $item->product_id,
+                type: 'purchase',
+                qty: $item->quantity,
+                note: "Purchase from {$purchase->supplier_name}",
+                referenceType: 'purchase',
+                referenceId: $purchase->id,
+                userId: auth()->id()
+            );
+        }
+    }
+
+    /**
+     * REVERSE JURNAL PEMBELIAN (UNTUK UPDATE / DELETE)
+     */
+    // app/Services/InventoryService.php
+
     public function reversePurchase(Purchase $purchase): void
     {
         DB::transaction(function () use ($purchase) {
             foreach ($purchase->items as $item) {
-                if (!$item->product_id) continue;
+                if (!$item->product_id) {
+                    continue;
+                }
 
                 $inventory = Inventory::where('product_id', $item->product_id)->first();
-                if (!$inventory) continue;
+
+                if (!$inventory) {
+                    continue;
+                }
 
                 $inventory->reduceStock(
                     quantity: $item->quantity,
@@ -57,130 +116,78 @@ class InventoryService
             }
         });
     }
-
     /**
-     * Process inventory for a transaction/sale (decrease stock)
+     * Proses transaksi penjualan (OUT stok)
      */
-    public function processTransaction(Transaction $transaction): void
+    public function processTransaction($transaction): void
     {
-        DB::transaction(function () use ($transaction) {
-            foreach ($transaction->details as $detail) {
-                if (!$detail->product_id) continue;
+        $transaction->load('details.product');
 
-                $inventory = Inventory::where('product_id', $detail->product_id)->first();
-                if (!$inventory) {
-                    $inventory = Inventory::getOrCreateForProduct($detail->product);
-                }
-
-                $inventory->reduceStock(
-                    quantity: $detail->quantity,
-                    type: InventoryAdjustment::TYPE_SALE,
-                    reason: "Sale invoice: {$transaction->invoice}",
-                    referenceType: 'transaction',
-                    referenceId: $transaction->id
-                );
+        foreach ($transaction->details as $detail) {
+            if (!$detail->product_id) {
+                continue;
             }
-        });
+
+            self::record(
+                productId: $detail->product_id,
+                type: 'sale',
+                qty: $detail->quantity,
+                note: 'Penjualan #' . $transaction->invoice,
+                referenceType: 'transaction',
+                referenceId: $transaction->id,
+                userId: auth()->id()
+            );
+        } 
     }
 
-    /**
-     * Reverse inventory for a transaction (when refunded/cancelled)
-     */
-    public function reverseTransaction(Transaction $transaction): void
+    public function reverseTransaction($transaction): void
     {
-        DB::transaction(function () use ($transaction) {
-            foreach ($transaction->details as $detail) {
-                if (!$detail->product_id) continue;
+        $transaction->load('details.product');
 
-                $inventory = Inventory::where('product_id', $detail->product_id)->first();
-                if (!$inventory) continue;
-
-                $inventory->addStock(
-                    quantity: $detail->quantity,
-                    type: InventoryAdjustment::TYPE_RETURN,
-                    reason: "Return for invoice: {$transaction->invoice}",
-                    referenceType: 'transaction',
-                    referenceId: $transaction->id
-                );
+        foreach ($transaction->details as $detail) {
+            if (!$detail->product_id) {
+                continue;
             }
-        });
-    }
 
-    /**
-     * Manual stock adjustment
-     */
-    public function manualAdjustment(
-        Product $product,
-        float $quantity,
-        string $type,
-        ?string $reason = null,
-        ?int $userId = null
-    ): InventoryAdjustment {
-        $inventory = Inventory::getOrCreateForProduct($product);
-
-        if (in_array($type, [InventoryAdjustment::TYPE_IN, InventoryAdjustment::TYPE_PURCHASE, InventoryAdjustment::TYPE_RETURN])) {
-            return $inventory->addStock($quantity, $type, $reason, null, null, $userId);
-        } else {
-            return $inventory->reduceStock($quantity, $type, $reason, null, null, $userId);
+            self::record(
+                productId: $detail->product_id,
+                type: 'sale_reverse',
+                qty: $detail->quantity,
+                note: 'Reverse transaksi #' . $transaction->invoice,
+                referenceType: 'transaction',
+                referenceId: $transaction->id,
+                userId: auth()->id()
+            );
         }
     }
 
-    /**
-     * Stock correction (set to specific quantity)
-     */
-    public function stockCorrection(Product $product, float $newQuantity, ?string $reason = null, ?int $userId = null): InventoryAdjustment
-    {
-        $inventory = Inventory::getOrCreateForProduct($product);
-        return $inventory->setStock($newQuantity, $reason, $userId);
-    }
+
 
     /**
-     * Get stock movement history for a product
+     * Ringkasan inventory (DASHBOARD)
+     * ⚠️ Menggunakan saldo akhir produk, BUKAN jurnal
      */
-    public function getStockHistory(Product $product, ?string $from = null, ?string $to = null)
-    {
-        $query = InventoryAdjustment::forProduct($product->id)
-            ->with('user')
-            ->orderBy('created_at', 'desc');
-
-        if ($from && $to) {
-            $query->dateRange($from, $to);
-        }
-
-        return $query->get();
-    }
-
-    /**
-     * Get inventory summary
-     */
-    public function getInventorySummary()
+    public function getInventorySummary(): array
     {
         return [
             'total_products' => Product::count(),
-            'total_stock_value' => Product::sum(DB::raw('stock * buy_price')),
-            'total_sell_value' => Product::sum(DB::raw('stock * sell_price')),
-            'low_stock_count' => Product::where('stock', '<=', 10)->where('stock', '>', 0)->count(),
-            'out_of_stock_count' => Product::where('stock', '<=', 0)->count(),
+
+            'total_stock' => Product::sum('stock'),
+
+            'total_stock_value_buy' => Product::sum(
+                DB::raw('stock * COALESCE(buy_price, 0)')
+            ),
+
+            'total_stock_value_sell' => Product::sum(
+                DB::raw('stock * COALESCE(sell_price, 0)')
+            ),
+
+            'low_stock_count' => Product::where('stock', '>', 0)
+                ->where('stock', '<=', 10)
+                ->count(),
+
+            'out_of_stock_count' => Product::where('stock', '<=', 0)
+                ->count(),
         ];
-    }
-
-    /**
-     * Sync inventory with product stock
-     */
-    public function syncInventoryWithProducts(): int
-    {
-        $synced = 0;
-
-        Product::chunk(100, function ($products) use (&$synced) {
-            foreach ($products as $product) {
-                $inventory = Inventory::firstOrNew(['product_id' => $product->id]);
-                $inventory->barcode = $product->barcode;
-                $inventory->quantity = $product->stock;
-                $inventory->save();
-                $synced++;
-            }
-        });
-
-        return $synced;
     }
 }

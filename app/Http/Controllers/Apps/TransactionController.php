@@ -118,7 +118,7 @@ class TransactionController extends Controller
                     ->first();
 
         if ($cart) {
-            $cart->increment('quantity', $request->quantity);
+            // $cart->increment('quantity', $request->quantity);
             $cart->price = $product->sell_price * $cart->quantity;
             $cart->save();
         } else {
