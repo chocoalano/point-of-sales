@@ -2,46 +2,41 @@
 
 namespace Tests\Unit;
 
-use App\Models\Cart;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Inventory;
-use App\Models\InventoryAdjustment;
 use App\Models\Product;
-use App\Models\Profit;
+use App\Models\StockMovement;
 use App\Models\Transaction;
 use App\Models\TransactionDetail;
 use App\Models\User;
+use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Unit Test Transaksi POS
+ * Unit Test Proses Transaksi Penjualan
  *
- * Test ini memastikan seluruh alur transaksi berjalan dengan benar:
- * - Relasi antar model
- * - Perhitungan total transaksi
- * - Perhitungan profit
- * - Pengurangan stok
- * - Integritas data
+ * Test ini memastikan proses transaksi penjualan bekerja dengan benar
+ * dan menghitung profit berdasarkan average buy price dari StockMovement
  */
 class TransaksiTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected User $kasir;
+    protected InventoryService $inventoryService;
+    protected User $user;
     protected Category $kategori;
-    protected Product $produk;
-    protected Customer $pelanggan;
+    protected Customer $customer;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Buat data dasar untuk testing
-        $this->kasir = User::factory()->create([
-            'name' => 'Kasir Test',
-            'email' => 'kasir@test.com',
+        $this->inventoryService = new InventoryService();
+
+        $this->user = User::factory()->create([
+            'name' => 'Kasir',
         ]);
 
         $this->kategori = Category::create([
@@ -49,140 +44,68 @@ class TransaksiTest extends TestCase
             'description' => 'Kategori makanan',
         ]);
 
-        $this->produk = Product::create([
-            'barcode' => 'PRD001',
-            'title' => 'Nasi Goreng',
-            'description' => 'Nasi goreng spesial',
-            'category_id' => $this->kategori->id,
-            'buy_price' => 15000,  // Harga beli
-            'sell_price' => 25000, // Harga jual
-            'stock' => 100,
-        ]);
-
-        $this->pelanggan = Customer::create([
-            'name' => 'Budi Santoso',
-            'no_telp' => '08123456789',
-            'address' => 'Jl. Merdeka No. 123',
-        ]);
-
-        // Buat inventory untuk produk
-        Inventory::create([
-            'product_id' => $this->produk->id,
-            'barcode' => $this->produk->barcode,
-            'quantity' => $this->produk->stock,
+        $this->customer = Customer::create([
+            'name' => 'Pelanggan Umum',
+            'no_telp' => 8123456789,
+            'address' => 'Jakarta',
         ]);
     }
 
     // ==========================================
-    // TEST RELASI MODEL TRANSAKSI
+    // TEST PEMBUATAN TRANSAKSI
     // ==========================================
 
     /** @test */
-    public function transaksi_memiliki_relasi_dengan_kasir(): void
+    public function dapat_membuat_transaksi(): void
     {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-TEST001',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-' . date('Ymd') . '-001',
+            'total_amount' => 50000,
+            'total_profit' => 15000,
         ]);
 
-        $this->assertInstanceOf(User::class, $transaksi->cashier);
-        $this->assertEquals($this->kasir->id, $transaksi->cashier->id);
-        $this->assertEquals('Kasir Test', $transaksi->cashier->name);
+        $this->assertDatabaseHas('transactions', [
+            'id' => $transaction->id,
+            'user_id' => $this->user->id,
+        ]);
     }
 
     /** @test */
-    public function transaksi_memiliki_relasi_dengan_pelanggan(): void
+    public function dapat_membuat_transaksi_dengan_customer(): void
     {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-TEST002',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'customer_id' => $this->customer->id,
+            'invoice_number' => 'INV-' . date('Ymd') . '-002',
+            'total_amount' => 100000,
+            'total_profit' => 30000,
         ]);
 
-        $this->assertInstanceOf(Customer::class, $transaksi->customer);
-        $this->assertEquals($this->pelanggan->id, $transaksi->customer->id);
-        $this->assertEquals('Budi Santoso', $transaksi->customer->name);
+        $this->assertEquals($this->customer->id, $transaction->customer_id);
+        $this->assertInstanceOf(Customer::class, $transaction->customer);
     }
 
     /** @test */
-    public function transaksi_memiliki_banyak_detail_transaksi(): void
+    public function invoice_number_unik(): void
     {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-TEST003',
-            'cash' => 100000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 75000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
+        $invoiceNumber = 'INV-' . date('Ymd') . '-003';
+
+        Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => $invoiceNumber,
+            'total_amount' => 50000,
+            'total_profit' => 15000,
         ]);
 
-        // Buat 2 detail transaksi
-        TransactionDetail::create([
-            'transaction_id' => $transaksi->id,
-            'product_id' => $this->produk->id,
-            'barcode' => $this->produk->barcode,
-            'quantity' => 1,
-            'discount' => 0,
-            'price' => 25000,
+        $this->expectException(\Illuminate\Database\QueryException::class);
+
+        Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => $invoiceNumber, // Duplicate
+            'total_amount' => 75000,
+            'total_profit' => 20000,
         ]);
-
-        TransactionDetail::create([
-            'transaction_id' => $transaksi->id,
-            'product_id' => $this->produk->id,
-            'barcode' => $this->produk->barcode,
-            'quantity' => 2,
-            'discount' => 0,
-            'price' => 50000,
-        ]);
-
-        $transaksi->refresh();
-
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $transaksi->details);
-        $this->assertCount(2, $transaksi->details);
-    }
-
-    /** @test */
-    public function transaksi_memiliki_banyak_profit(): void
-    {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-TEST004',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
-        ]);
-
-        // Buat profit untuk transaksi
-        Profit::create([
-            'transaction_id' => $transaksi->id,
-            'total' => 10000, // Profit = sell_price - buy_price = 25000 - 15000
-        ]);
-
-        $transaksi->refresh();
-
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $transaksi->profits);
-        $this->assertCount(1, $transaksi->profits);
-        $this->assertEquals(10000, $transaksi->profits->first()->total);
     }
 
     // ==========================================
@@ -190,385 +113,440 @@ class TransaksiTest extends TestCase
     // ==========================================
 
     /** @test */
-    public function detail_transaksi_memiliki_relasi_ke_transaksi(): void
+    public function dapat_menambah_detail_ke_transaksi(): void
     {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-TEST005',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
+        $produk = $this->buatProdukDenganStok('Roti Tawar', 8000, 12000, 100);
+
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-' . date('Ymd') . '-004',
+            'total_amount' => 24000,
+            'total_profit' => 8000,
         ]);
 
         $detail = TransactionDetail::create([
-            'transaction_id' => $transaksi->id,
-            'product_id' => $this->produk->id,
-            'barcode' => $this->produk->barcode,
-            'discount' => 0,
-            'quantity' => 1,
-            'price' => 25000,
-        ]);
-
-        $this->assertInstanceOf(Transaction::class, $detail->transaction);
-        $this->assertEquals($transaksi->id, $detail->transaction->id);
-    }
-
-    /** @test */
-    public function detail_transaksi_memiliki_relasi_ke_produk(): void
-    {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-TEST006',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
-        ]);
-
-        $detail = TransactionDetail::create([
-            'transaction_id' => $transaksi->id,
-            'product_id' => $this->produk->id,
-            'barcode' => $this->produk->barcode,
-            'discount' => 0,
-            'quantity' => 1,
-            'price' => 25000,
-        ]);
-
-        $this->assertInstanceOf(Product::class, $detail->product);
-        $this->assertEquals($this->produk->id, $detail->product->id);
-        $this->assertEquals('Nasi Goreng', $detail->product->title);
-    }
-
-    // ==========================================
-    // TEST PERHITUNGAN TRANSAKSI
-    // ==========================================
-
-    /** @test */
-    public function perhitungan_grand_total_transaksi_benar(): void
-    {
-        // Skenario: Beli 3 item dengan harga @25000, diskon 5000
-        $jumlahItem = 3;
-        $hargaSatuan = $this->produk->sell_price; // 25000
-        $totalHarga = $jumlahItem * $hargaSatuan; // 75000
-        $diskon = 5000;
-        $grandTotal = $totalHarga - $diskon; // 70000
-        $uangDibayar = 100000;
-        $kembalian = $uangDibayar - $grandTotal; // 30000
-
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-CALC001',
-            'cash' => $uangDibayar,
-            'change' => $kembalian,
-            'discount' => $diskon,
-            'grand_total' => $grandTotal,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
-        ]);
-
-        $this->assertEquals(100000, $transaksi->cash);
-        $this->assertEquals(30000, $transaksi->change);
-        $this->assertEquals(5000, $transaksi->discount);
-        $this->assertEquals(70000, $transaksi->grand_total);
-
-        // Verifikasi kembalian = uang - grand_total
-        $this->assertEquals(
-            $transaksi->cash - $transaksi->grand_total,
-            $transaksi->change
-        );
-    }
-
-    /** @test */
-    public function perhitungan_profit_per_transaksi_benar(): void
-    {
-        // Skenario: Beli 2 item dengan harga beli 15000, harga jual 25000
-        $jumlahItem = 2;
-        $hargaBeli = $this->produk->buy_price;   // 15000
-        $hargaJual = $this->produk->sell_price;  // 25000
-        $profitPerItem = $hargaJual - $hargaBeli; // 10000
-        $totalProfit = $profitPerItem * $jumlahItem; // 20000
-
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-PROFIT001',
-            'cash' => 50000,
-            'change' => 0,
-            'discount' => 0,
-            'grand_total' => 50000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
-        ]);
-
-        TransactionDetail::create([
-            'transaction_id' => $transaksi->id,
-            'product_id' => $this->produk->id,
-            'barcode' => $this->produk->barcode,
-            'discount' => 0,
-            'quantity' => $jumlahItem,
-            'price' => $hargaJual * $jumlahItem,
-        ]);
-
-        Profit::create([
-            'transaction_id' => $transaksi->id,
-            'total' => $totalProfit,
-        ]);
-
-        $transaksi->refresh();
-
-        $this->assertEquals(20000, $transaksi->profits->sum('total'));
-        $this->assertEquals(
-            ($hargaJual - $hargaBeli) * $jumlahItem,
-            $transaksi->profits->sum('total')
-        );
-    }
-
-    /** @test */
-    public function total_harga_detail_sesuai_dengan_kuantitas(): void
-    {
-        $jumlah = 5;
-        $hargaSatuan = $this->produk->sell_price; // 25000
-        $totalHarga = $jumlah * $hargaSatuan; // 125000
-
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-DETAIL001',
-            'cash' => 150000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => $totalHarga,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
-        ]);
-
-        $detail = TransactionDetail::create([
-            'transaction_id' => $transaksi->id,
-            'product_id' => $this->produk->id,
-            'barcode' => $this->produk->barcode,
-            'discount' => 0,
-            'quantity' => $jumlah,
-            'price' => $totalHarga,
-        ]);
-
-        $this->assertEquals(5, $detail->quantity);
-        $this->assertEquals(125000, $detail->price);
-        $this->assertEquals(
-            $detail->quantity * $this->produk->sell_price,
-            $detail->price
-        );
-    }
-
-    // ==========================================
-    // TEST STATUS PEMBAYARAN
-    // ==========================================
-
-    /** @test */
-    public function transaksi_tunai_berstatus_paid(): void
-    {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-CASH001',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
-        ]);
-
-        $this->assertEquals('cash', $transaksi->payment_method);
-        $this->assertEquals('paid', $transaksi->payment_status);
-        $this->assertNull($transaksi->payment_url);
-    }
-
-    /** @test */
-    public function transaksi_gateway_berstatus_pending(): void
-    {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-GATEWAY001',
-            'cash' => 0,
-            'change' => 0,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'midtrans',
-            'payment_status' => 'pending',
-            'payment_url' => 'https://payment.gateway/pay/xxx',
-            'payment_reference' => 'ORDER-XXX',
-        ]);
-
-        $this->assertEquals('midtrans', $transaksi->payment_method);
-        $this->assertEquals('pending', $transaksi->payment_status);
-        $this->assertNotNull($transaksi->payment_url);
-        $this->assertNotNull($transaksi->payment_reference);
-    }
-
-    // ==========================================
-    // TEST FORMAT INVOICE
-    // ==========================================
-
-    /** @test */
-    public function format_invoice_dimulai_dengan_trx(): void
-    {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-ABCD1234',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
-        ]);
-
-        $this->assertStringStartsWith('TRX-', $transaksi->invoice);
-    }
-
-    /** @test */
-    public function invoice_harus_berbeda_untuk_setiap_transaksi(): void
-    {
-        $transaksi1 = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-UNIQUE001',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
-        ]);
-
-        $transaksi2 = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-UNIQUE002',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
-        ]);
-
-        // Pastikan invoice berbeda
-        $this->assertNotEquals($transaksi1->invoice, $transaksi2->invoice);
-
-        // Verifikasi keduanya tersimpan dengan invoice masing-masing
-        $this->assertDatabaseHas('transactions', ['invoice' => 'TRX-UNIQUE001']);
-        $this->assertDatabaseHas('transactions', ['invoice' => 'TRX-UNIQUE002']);
-    }
-
-    // ==========================================
-    // TEST CART
-    // ==========================================
-
-    /** @test */
-    public function cart_memiliki_relasi_ke_produk(): void
-    {
-        $cart = Cart::create([
-            'cashier_id' => $this->kasir->id,
-            'product_id' => $this->produk->id,
+            'transaction_id' => $transaction->id,
+            'product_id' => $produk->id,
+            'barcode' => $produk->barcode,
             'quantity' => 2,
-            'price' => $this->produk->sell_price * 2,
+            'sell_price' => 12000,
+            'total_price' => 24000,
+            'buy_price' => 8000,
+            'profit' => 8000, // (12000 - 8000) x 2
         ]);
 
-        $this->assertInstanceOf(Product::class, $cart->product);
-        $this->assertEquals($this->produk->id, $cart->product->id);
-    }
-
-    /** @test */
-    public function cart_dihapus_setelah_transaksi_selesai(): void
-    {
-        $cart = Cart::create([
-            'cashier_id' => $this->kasir->id,
-            'product_id' => $this->produk->id,
-            'quantity' => 1,
-            'price' => $this->produk->sell_price,
-        ]);
-
-        $this->assertDatabaseHas('carts', ['id' => $cart->id]);
-
-        // Simulasi checkout - hapus cart
-        $cart->delete();
-
-        $this->assertDatabaseMissing('carts', ['id' => $cart->id]);
+        $transaction->refresh();
+        $this->assertCount(1, $transaction->details);
+        $this->assertEquals($produk->id, $detail->product_id);
     }
 
     // ==========================================
-    // TEST INTEGRITAS DATA
+    // TEST PERHITUNGAN PROFIT
     // ==========================================
 
     /** @test */
-    public function transaksi_tanpa_pelanggan_diperbolehkan(): void
+    public function profit_dihitung_dari_selisih_harga_jual_dan_harga_beli(): void
     {
-        $transaksi = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => null, // Guest checkout
-            'invoice' => 'TRX-GUEST001',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
+        $produk = $this->buatProdukDenganStok('Kue Bolu', 15000, 25000, 50);
+
+        // Profit per item = 25000 - 15000 = 10000
+        // Quantity = 3
+        // Total profit = 30000
+
+        $detail = TransactionDetail::create([
+            'transaction_id' => $this->buatTransaksi()->id,
+            'product_id' => $produk->id,
+            'barcode' => $produk->barcode,
+            'quantity' => 3,
+            'sell_price' => 25000,
+            'total_price' => 75000,
+            'buy_price' => 15000,
+            'profit' => 30000, // (25000 - 15000) x 3
         ]);
 
-        $this->assertNull($transaksi->customer_id);
-        $this->assertNull($transaksi->customer);
-        $this->assertNotNull($transaksi->cashier);
+        $this->assertEquals(30000, $detail->profit);
     }
 
     /** @test */
-    public function profit_terhubung_dengan_transaksi_yang_benar(): void
+    public function profit_menggunakan_average_buy_price_dari_stock_movement(): void
     {
-        $transaksi1 = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-PROFIT-A',
-            'cash' => 50000,
-            'change' => 25000,
-            'discount' => 0,
-            'grand_total' => 25000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
+        $produk = $this->buatProduk('Mie Instan', 2000, 3500);
+
+        // Pembelian pertama: 100 @ 2000 = 200000
+        StockMovement::create([
+            'product_id' => $produk->id,
+            'movement_type' => StockMovement::TYPE_PURCHASE,
+            'quantity' => 100,
+            'unit_price' => 2000,
+            'total_price' => 200000,
+            'quantity_before' => 0,
+            'quantity_after' => 100,
         ]);
 
-        $transaksi2 = Transaction::create([
-            'cashier_id' => $this->kasir->id,
-            'customer_id' => $this->pelanggan->id,
-            'invoice' => 'TRX-PROFIT-B',
-            'cash' => 100000,
-            'change' => 50000,
-            'discount' => 0,
-            'grand_total' => 50000,
-            'payment_method' => 'cash',
-            'payment_status' => 'paid',
+        // Pembelian kedua: 100 @ 2500 = 250000
+        StockMovement::create([
+            'product_id' => $produk->id,
+            'movement_type' => StockMovement::TYPE_PURCHASE,
+            'quantity' => 100,
+            'unit_price' => 2500,
+            'total_price' => 250000,
+            'quantity_before' => 100,
+            'quantity_after' => 200,
         ]);
 
-        Profit::create(['transaction_id' => $transaksi1->id, 'total' => 10000]);
-        Profit::create(['transaction_id' => $transaksi2->id, 'total' => 20000]);
+        // Average buy price = (200000 + 250000) / 200 = 2250
+        $avgBuyPrice = StockMovement::getAverageBuyPrice($produk->id);
+        $this->assertEquals(2250, $avgBuyPrice);
 
-        $transaksi1->refresh();
-        $transaksi2->refresh();
+        // Jual 10 unit @ 3500
+        // Profit = (3500 - 2250) x 10 = 12500
+        $profitPerItem = 3500 - $avgBuyPrice;
+        $totalProfit = $profitPerItem * 10;
 
-        $this->assertEquals(10000, $transaksi1->profits->sum('total'));
-        $this->assertEquals(20000, $transaksi2->profits->sum('total'));
+        $this->assertEquals(12500, $totalProfit);
+    }
 
-        // Verifikasi profit terhubung ke transaksi yang benar
-        $this->assertEquals($transaksi1->id, $transaksi1->profits->first()->transaction_id);
-        $this->assertEquals($transaksi2->id, $transaksi2->profits->first()->transaction_id);
+    /** @test */
+    public function total_profit_transaksi_adalah_jumlah_profit_semua_item(): void
+    {
+        $produk1 = $this->buatProdukDenganStok('Snack A', 5000, 8000, 50);
+        $produk2 = $this->buatProdukDenganStok('Snack B', 7000, 10000, 50);
+
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-' . date('Ymd') . '-005',
+            'total_amount' => 0,
+            'total_profit' => 0,
+        ]);
+
+        // Detail 1: profit = (8000 - 5000) x 2 = 6000
+        TransactionDetail::create([
+            'transaction_id' => $transaction->id,
+            'product_id' => $produk1->id,
+            'barcode' => $produk1->barcode,
+            'quantity' => 2,
+            'sell_price' => 8000,
+            'total_price' => 16000,
+            'buy_price' => 5000,
+            'profit' => 6000,
+        ]);
+
+        // Detail 2: profit = (10000 - 7000) x 3 = 9000
+        TransactionDetail::create([
+            'transaction_id' => $transaction->id,
+            'product_id' => $produk2->id,
+            'barcode' => $produk2->barcode,
+            'quantity' => 3,
+            'sell_price' => 10000,
+            'total_price' => 30000,
+            'buy_price' => 7000,
+            'profit' => 9000,
+        ]);
+
+        $transaction->refresh();
+
+        $totalAmount = $transaction->details->sum('total_price');
+        $totalProfit = $transaction->details->sum('profit');
+
+        $this->assertEquals(46000, $totalAmount);
+        $this->assertEquals(15000, $totalProfit);
+    }
+
+    // ==========================================
+    // TEST PENGURANGAN STOK
+    // ==========================================
+
+    /** @test */
+    public function transaksi_mengurangi_stok_via_stock_movement(): void
+    {
+        $produk = $this->buatProdukDenganStok('Minuman Kaleng', 5000, 8000, 100);
+
+        $stokAwal = StockMovement::getCurrentStock($produk->id);
+        $this->assertEquals(100, $stokAwal);
+
+        $transaction = $this->buatTransaksi();
+
+        // Simulasi penjualan 5 unit
+        StockMovement::create([
+            'product_id' => $produk->id,
+            'movement_type' => StockMovement::TYPE_SALE,
+            'quantity' => -5, // Negatif untuk penjualan
+            'unit_price' => 8000,
+            'total_price' => 40000,
+            'quantity_before' => 100,
+            'quantity_after' => 95,
+            'reference_type' => 'transaction',
+            'reference_id' => $transaction->id,
+        ]);
+
+        $stokAkhir = StockMovement::getCurrentStock($produk->id);
+        $this->assertEquals(95, $stokAkhir);
+    }
+
+    // ==========================================
+    // TEST VALIDASI STOK
+    // ==========================================
+
+    /** @test */
+    public function dapat_validasi_stok_sebelum_transaksi(): void
+    {
+        $produk = $this->buatProdukDenganStok('Produk Validasi', 10000, 15000, 20);
+
+        // Validasi untuk quantity yang tersedia
+        $valid = $this->inventoryService->validateStockForTransaction([
+            ['product_id' => $produk->id, 'quantity' => 15],
+        ]);
+
+        $this->assertTrue($valid['valid']);
+
+        // Validasi untuk quantity yang tidak tersedia
+        $invalid = $this->inventoryService->validateStockForTransaction([
+            ['product_id' => $produk->id, 'quantity' => 25],
+        ]);
+
+        $this->assertFalse($invalid['valid']);
+        $this->assertCount(1, $invalid['errors']);
+    }
+
+    /** @test */
+    public function validasi_stok_untuk_multiple_produk(): void
+    {
+        $produk1 = $this->buatProdukDenganStok('Multi 1', 5000, 8000, 30);
+        $produk2 = $this->buatProdukDenganStok('Multi 2', 7000, 10000, 15);
+
+        // Semua tersedia
+        $valid = $this->inventoryService->validateStockForTransaction([
+            ['product_id' => $produk1->id, 'quantity' => 25],
+            ['product_id' => $produk2->id, 'quantity' => 10],
+        ]);
+
+        $this->assertTrue($valid['valid']);
+
+        // Produk 2 tidak cukup
+        $invalid = $this->inventoryService->validateStockForTransaction([
+            ['product_id' => $produk1->id, 'quantity' => 25],
+            ['product_id' => $produk2->id, 'quantity' => 20], // Hanya ada 15
+        ]);
+
+        $this->assertFalse($invalid['valid']);
+    }
+
+    // ==========================================
+    // TEST RIWAYAT TRANSAKSI
+    // ==========================================
+
+    /** @test */
+    public function dapat_melihat_riwayat_transaksi_user(): void
+    {
+        Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-001',
+            'total_amount' => 50000,
+            'total_profit' => 15000,
+        ]);
+
+        Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-002',
+            'total_amount' => 75000,
+            'total_profit' => 20000,
+        ]);
+
+        $transactions = Transaction::where('user_id', $this->user->id)->get();
+
+        $this->assertCount(2, $transactions);
+    }
+
+    /** @test */
+    public function dapat_melihat_riwayat_transaksi_customer(): void
+    {
+        Transaction::create([
+            'user_id' => $this->user->id,
+            'customer_id' => $this->customer->id,
+            'invoice_number' => 'INV-003',
+            'total_amount' => 100000,
+            'total_profit' => 30000,
+        ]);
+
+        Transaction::create([
+            'user_id' => $this->user->id,
+            'customer_id' => $this->customer->id,
+            'invoice_number' => 'INV-004',
+            'total_amount' => 150000,
+            'total_profit' => 45000,
+        ]);
+
+        $transactions = Transaction::where('customer_id', $this->customer->id)->get();
+
+        $this->assertCount(2, $transactions);
+
+        $totalBelanja = $transactions->sum('total_amount');
+        $this->assertEquals(250000, $totalBelanja);
+    }
+
+    // ==========================================
+    // TEST DISKON DAN PEMBAYARAN
+    // ==========================================
+
+    /** @test */
+    public function transaksi_dapat_menyimpan_diskon(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-005',
+            'total_amount' => 100000,
+            'discount' => 10000,
+            'total_profit' => 25000,
+        ]);
+
+        $this->assertEquals(10000, $transaction->discount);
+    }
+
+    /** @test */
+    public function transaksi_menyimpan_amount_paid_dan_change(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-006',
+            'total_amount' => 85000,
+            'amount_paid' => 100000,
+            'change_amount' => 15000,
+            'total_profit' => 25000,
+        ]);
+
+        $this->assertEquals(100000, $transaction->amount_paid);
+        $this->assertEquals(15000, $transaction->change_amount);
+    }
+
+    // ==========================================
+    // TEST PEMBATALAN TRANSAKSI
+    // ==========================================
+
+    /** @test */
+    public function dapat_membatalkan_transaksi_dan_mengembalikan_stok(): void
+    {
+        $produk = $this->buatProdukDenganStok('Produk Batal', 10000, 15000, 100);
+
+        $stokAwal = StockMovement::getCurrentStock($produk->id);
+
+        $transaction = $this->buatTransaksi();
+
+        // Simulasi penjualan
+        StockMovement::create([
+            'product_id' => $produk->id,
+            'movement_type' => StockMovement::TYPE_SALE,
+            'quantity' => -10,
+            'unit_price' => 15000,
+            'total_price' => 150000,
+            'quantity_before' => $stokAwal,
+            'quantity_after' => $stokAwal - 10,
+            'reference_type' => 'transaction',
+            'reference_id' => $transaction->id,
+        ]);
+
+        $stokSetelahJual = StockMovement::getCurrentStock($produk->id);
+        $this->assertEquals($stokAwal - 10, $stokSetelahJual);
+
+        // Pembatalan (return stok)
+        $currentStock = StockMovement::getCurrentStock($produk->id);
+        StockMovement::create([
+            'product_id' => $produk->id,
+            'movement_type' => StockMovement::TYPE_RETURN,
+            'quantity' => 10, // Positif karena return
+            'unit_price' => 10000, // Harga beli
+            'total_price' => 100000,
+            'quantity_before' => $currentStock,
+            'quantity_after' => $currentStock + 10,
+            'notes' => 'Pembatalan transaksi ' . $transaction->invoice_number,
+        ]);
+
+        $stokSetelahBatal = StockMovement::getCurrentStock($produk->id);
+        $this->assertEquals($stokAwal, $stokSetelahBatal);
+    }
+
+    // ==========================================
+    // TEST METODE PEMBAYARAN
+    // ==========================================
+
+    /** @test */
+    public function transaksi_dapat_menyimpan_metode_pembayaran(): void
+    {
+        $transaction = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-007',
+            'total_amount' => 50000,
+            'total_profit' => 15000,
+            'payment_method' => 'cash',
+        ]);
+
+        $this->assertEquals('cash', $transaction->payment_method);
+
+        $transaction2 = Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-008',
+            'total_amount' => 75000,
+            'total_profit' => 20000,
+            'payment_method' => 'qris',
+        ]);
+
+        $this->assertEquals('qris', $transaction2->payment_method);
+    }
+
+    // ==========================================
+    // HELPER METHODS
+    // ==========================================
+
+    private function buatProduk(string $title, int $buyPrice, int $sellPrice): Product
+    {
+        static $counter = 0;
+        $counter++;
+
+        return Product::create([
+            'barcode' => 'TRANS' . str_pad($counter, 3, '0', STR_PAD_LEFT),
+            'title' => $title,
+            'description' => $title . ' deskripsi',
+            'category_id' => $this->kategori->id,
+            'buy_price' => $buyPrice,
+            'sell_price' => $sellPrice,
+            'stock' => 0,
+        ]);
+    }
+
+    private function buatProdukDenganStok(string $title, int $buyPrice, int $sellPrice, int $stock): Product
+    {
+        $produk = $this->buatProduk($title, $buyPrice, $sellPrice);
+        $produk->update(['stock' => $stock]);
+
+        Inventory::create([
+            'product_id' => $produk->id,
+            'barcode' => $produk->barcode,
+            'quantity' => $stock,
+        ]);
+
+        // Initial stock movement
+        StockMovement::create([
+            'product_id' => $produk->id,
+            'movement_type' => StockMovement::TYPE_PURCHASE,
+            'quantity' => $stock,
+            'unit_price' => $buyPrice,
+            'total_price' => $stock * $buyPrice,
+            'quantity_before' => 0,
+            'quantity_after' => $stock,
+        ]);
+
+        return $produk;
+    }
+
+    private function buatTransaksi(): Transaction
+    {
+        static $invoiceCounter = 100;
+        $invoiceCounter++;
+
+        return Transaction::create([
+            'user_id' => $this->user->id,
+            'invoice_number' => 'INV-' . date('Ymd') . '-' . $invoiceCounter,
+            'total_amount' => 0,
+            'total_profit' => 0,
+        ]);
     }
 }

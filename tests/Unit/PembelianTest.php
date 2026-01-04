@@ -4,545 +4,438 @@ namespace Tests\Unit;
 
 use App\Models\Category;
 use App\Models\Inventory;
-use App\Models\InventoryAdjustment;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
+use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Unit Test Pembelian (Purchase)
+ * Unit Test Proses Pembelian
  *
- * Test ini memastikan alur pembelian/restock berjalan dengan benar:
- * - Relasi purchase dengan items
- * - Perhitungan total pembelian
- * - Update stok otomatis
- * - Status pembelian
+ * Test ini memastikan proses pembelian/purchase bekerja dengan benar
+ * dan terintegrasi dengan StockMovement sebagai ledger utama
  */
 class PembelianTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected InventoryService $inventoryService;
     protected User $user;
     protected Category $kategori;
-    protected Product $produk1;
-    protected Product $produk2;
 
     protected function setUp(): void
     {
         parent::setUp();
 
+        $this->inventoryService = new InventoryService();
+
         $this->user = User::factory()->create([
-            'name' => 'Manager Pembelian',
+            'name' => 'Admin Pembelian',
         ]);
 
         $this->kategori = Category::create([
-            'name' => 'Snack',
-            'description' => 'Makanan ringan',
-        ]);
-
-        $this->produk1 = Product::create([
-            'barcode' => 'SNK001',
-            'title' => 'Keripik Singkong',
-            'description' => 'Keripik singkong renyah',
-            'category_id' => $this->kategori->id,
-            'buy_price' => 8000,
-            'sell_price' => 12000,
-            'stock' => 20,
-        ]);
-
-        $this->produk2 = Product::create([
-            'barcode' => 'SNK002',
-            'title' => 'Kacang Goreng',
-            'description' => 'Kacang goreng gurih',
-            'category_id' => $this->kategori->id,
-            'buy_price' => 10000,
-            'sell_price' => 15000,
-            'stock' => 30,
-        ]);
-
-        // Buat inventory untuk produk
-        Inventory::create([
-            'product_id' => $this->produk1->id,
-            'barcode' => $this->produk1->barcode,
-            'quantity' => $this->produk1->stock,
-        ]);
-
-        Inventory::create([
-            'product_id' => $this->produk2->id,
-            'barcode' => $this->produk2->barcode,
-            'quantity' => $this->produk2->stock,
+            'name' => 'ATK',
+            'description' => 'Alat Tulis Kantor',
         ]);
     }
 
     // ==========================================
-    // TEST RELASI PURCHASE
+    // TEST PEMBUATAN PURCHASE
     // ==========================================
 
     /** @test */
-    public function purchase_memiliki_banyak_items(): void
+    public function dapat_membuat_purchase_order(): void
     {
         $purchase = Purchase::create([
-            'supplier_name' => 'CV Snack Enak',
+            'supplier_name' => 'PT Supplier ATK',
             'purchase_date' => now(),
-            'status' => 'received',
+            'status' => 'pending',
         ]);
 
-        PurchaseItem::create([
-            'purchase_id' => $purchase->id,
-            'product_id' => $this->produk1->id,
-            'barcode' => $this->produk1->barcode,
-            'quantity' => 50,
-            'purchase_price' => 8000,
-            'total_price' => 400000,
+        $this->assertDatabaseHas('purchases', [
+            'id' => $purchase->id,
+            'supplier_name' => 'PT Supplier ATK',
+            'status' => 'pending',
         ]);
-
-        PurchaseItem::create([
-            'purchase_id' => $purchase->id,
-            'product_id' => $this->produk2->id,
-            'barcode' => $this->produk2->barcode,
-            'quantity' => 30,
-            'purchase_price' => 10000,
-            'total_price' => 300000,
-        ]);
-
-        $purchase->refresh();
-
-        $this->assertInstanceOf(\Illuminate\Database\Eloquent\Collection::class, $purchase->items);
-        $this->assertCount(2, $purchase->items);
     }
 
     /** @test */
-    public function purchase_item_memiliki_relasi_ke_purchase(): void
+    public function dapat_menambah_item_ke_purchase(): void
     {
+        $produk = $this->buatProduk('Pensil 2B', 2000, 3000, 0);
+
         $purchase = Purchase::create([
-            'supplier_name' => 'Supplier ABC',
+            'supplier_name' => 'Supplier Pensil',
             'purchase_date' => now(),
             'status' => 'pending',
         ]);
 
         $item = PurchaseItem::create([
             'purchase_id' => $purchase->id,
-            'product_id' => $this->produk1->id,
-            'barcode' => $this->produk1->barcode,
-            'quantity' => 25,
-            'purchase_price' => 8000,
+            'product_id' => $produk->id,
+            'barcode' => $produk->barcode,
+            'quantity' => 100,
+            'purchase_price' => 2000,
             'total_price' => 200000,
         ]);
 
-        $this->assertInstanceOf(Purchase::class, $item->purchase);
-        $this->assertEquals($purchase->id, $item->purchase->id);
-    }
-
-    /** @test */
-    public function purchase_item_memiliki_relasi_ke_produk(): void
-    {
-        $purchase = Purchase::create([
-            'supplier_name' => 'Supplier XYZ',
-            'purchase_date' => now(),
-            'status' => 'received',
-        ]);
-
-        $item = PurchaseItem::create([
+        $this->assertDatabaseHas('purchase_items', [
+            'id' => $item->id,
             'purchase_id' => $purchase->id,
-            'product_id' => $this->produk1->id,
-            'barcode' => $this->produk1->barcode,
-            'quantity' => 40,
-            'purchase_price' => 8000,
-            'total_price' => 320000,
+            'quantity' => 100,
         ]);
 
-        $this->assertInstanceOf(Product::class, $item->product);
-        $this->assertEquals($this->produk1->id, $item->product->id);
-        $this->assertEquals('Keripik Singkong', $item->product->title);
-    }
-
-    // ==========================================
-    // TEST PERHITUNGAN PEMBELIAN
-    // ==========================================
-
-    /** @test */
-    public function perhitungan_total_harga_item_benar(): void
-    {
-        $jumlah = 50;
-        $hargaSatuan = $this->produk1->buy_price; // 8000
-        $totalHarga = $jumlah * $hargaSatuan; // 400000
-
-        $purchase = Purchase::create([
-            'supplier_name' => 'Supplier Hitung',
-            'purchase_date' => now(),
-            'status' => 'received',
-        ]);
-
-        $item = PurchaseItem::create([
-            'purchase_id' => $purchase->id,
-            'product_id' => $this->produk1->id,
-            'barcode' => $this->produk1->barcode,
-            'quantity' => $jumlah,
-            'purchase_price' => $hargaSatuan,
-            'total_price' => $totalHarga,
-        ]);
-
-        $this->assertEquals(50, $item->quantity);
-        $this->assertEquals(8000, $item->purchase_price);
-        $this->assertEquals(400000, $item->total_price);
-        $this->assertEquals(
-            $item->quantity * $item->purchase_price,
-            $item->total_price
-        );
+        $purchase->refresh();
+        $this->assertCount(1, $purchase->items);
     }
 
     /** @test */
-    public function perhitungan_total_semua_item_purchase_benar(): void
+    public function total_purchase_dihitung_dengan_benar(): void
     {
+        $produk1 = $this->buatProduk('Buku Tulis', 5000, 8000, 0);
+        $produk2 = $this->buatProduk('Pulpen', 3000, 5000, 0);
+
         $purchase = Purchase::create([
-            'supplier_name' => 'Multi Item Supplier',
+            'supplier_name' => 'Supplier ATK',
             'purchase_date' => now(),
-            'status' => 'received',
+            'status' => 'pending',
         ]);
 
-        // Item 1: 50 x 8000 = 400000
         PurchaseItem::create([
             'purchase_id' => $purchase->id,
-            'product_id' => $this->produk1->id,
-            'barcode' => $this->produk1->barcode,
+            'product_id' => $produk1->id,
+            'barcode' => $produk1->barcode,
             'quantity' => 50,
-            'purchase_price' => 8000,
-            'total_price' => 400000,
+            'purchase_price' => 5000,
+            'total_price' => 250000, // 50 x 5000
         ]);
 
-        // Item 2: 30 x 10000 = 300000
         PurchaseItem::create([
             'purchase_id' => $purchase->id,
-            'product_id' => $this->produk2->id,
-            'barcode' => $this->produk2->barcode,
-            'quantity' => 30,
-            'purchase_price' => 10000,
-            'total_price' => 300000,
+            'product_id' => $produk2->id,
+            'barcode' => $produk2->barcode,
+            'quantity' => 100,
+            'purchase_price' => 3000,
+            'total_price' => 300000, // 100 x 3000
         ]);
 
         $purchase->refresh();
 
-        // Total = 400000 + 300000 = 700000
-        $totalPembelian = $purchase->items->sum('total_price');
-
-        $this->assertEquals(700000, $totalPembelian);
+        $total = $purchase->items->sum('total_price');
+        $this->assertEquals(550000, $total);
     }
 
     // ==========================================
-    // TEST STATUS PEMBELIAN
+    // TEST PROSES PEMBELIAN KE STOK
     // ==========================================
 
     /** @test */
-    public function purchase_bisa_berstatus_pending(): void
+    public function proses_pembelian_menambah_stok_produk(): void
+    {
+        $produk = $this->buatProduk('Penghapus', 1000, 2000, 50);
+        $this->buatInventory($produk);
+        $this->buatInitialMovement($produk, 50, 1000);
+
+        $stokAwal = StockMovement::getCurrentStock($produk->id);
+        $this->assertEquals(50, $stokAwal);
+
+        $purchase = $this->buatPurchaseDenganItem($produk, 100, 1000);
+
+        $this->inventoryService->processPurchase($purchase);
+
+        $stokAkhir = StockMovement::getCurrentStock($produk->id);
+        $this->assertEquals(150, $stokAkhir); // 50 + 100
+    }
+
+    /** @test */
+    public function proses_pembelian_membuat_stock_movement(): void
+    {
+        $produk = $this->buatProduk('Rautan', 1500, 2500, 0);
+
+        $purchase = $this->buatPurchaseDenganItem($produk, 50, 1500);
+
+        $this->inventoryService->processPurchase($purchase);
+
+        $movement = StockMovement::where('reference_type', 'purchase')
+            ->where('reference_id', $purchase->id)
+            ->where('product_id', $produk->id)
+            ->first();
+
+        $this->assertNotNull($movement);
+        $this->assertEquals(StockMovement::TYPE_PURCHASE, $movement->movement_type);
+        $this->assertEquals(50, $movement->quantity);
+        $this->assertEquals(1500, $movement->unit_price);
+        $this->assertEquals(75000, $movement->total_price);
+    }
+
+    /** @test */
+    public function proses_pembelian_dengan_multiple_item(): void
+    {
+        $produk1 = $this->buatProduk('Spidol Hitam', 4000, 6000, 20);
+        $produk2 = $this->buatProduk('Spidol Merah', 4000, 6000, 15);
+
+        $this->buatInventory($produk1);
+        $this->buatInventory($produk2);
+        $this->buatInitialMovement($produk1, 20, 4000);
+        $this->buatInitialMovement($produk2, 15, 4000);
+
+        $purchase = Purchase::create([
+            'supplier_name' => 'Supplier Spidol',
+            'purchase_date' => now(),
+            'status' => 'received',
+        ]);
+
+        PurchaseItem::create([
+            'purchase_id' => $purchase->id,
+            'product_id' => $produk1->id,
+            'barcode' => $produk1->barcode,
+            'quantity' => 30,
+            'purchase_price' => 4000,
+            'total_price' => 120000,
+        ]);
+
+        PurchaseItem::create([
+            'purchase_id' => $purchase->id,
+            'product_id' => $produk2->id,
+            'barcode' => $produk2->barcode,
+            'quantity' => 25,
+            'purchase_price' => 4000,
+            'total_price' => 100000,
+        ]);
+
+        $purchase->load('items.product');
+
+        $this->inventoryService->processPurchase($purchase);
+
+        // Verifikasi kedua produk stoknya bertambah
+        $this->assertEquals(50, StockMovement::getCurrentStock($produk1->id)); // 20 + 30
+        $this->assertEquals(40, StockMovement::getCurrentStock($produk2->id)); // 15 + 25
+    }
+
+    // ==========================================
+    // TEST PEMBATALAN PEMBELIAN
+    // ==========================================
+
+    /** @test */
+    public function dapat_membatalkan_pembelian(): void
+    {
+        $produk = $this->buatProduk('Tip-Ex', 5000, 8000, 30);
+        $this->buatInventory($produk);
+        $this->buatInitialMovement($produk, 30, 5000);
+
+        $purchase = $this->buatPurchaseDenganItem($produk, 20, 5000);
+
+        // Proses pembelian
+        $this->inventoryService->processPurchase($purchase);
+        $this->assertEquals(50, StockMovement::getCurrentStock($produk->id)); // 30 + 20
+
+        // Batalkan pembelian
+        $this->inventoryService->reversePurchase($purchase);
+
+        // Stok kembali ke semula
+        $this->assertEquals(30, StockMovement::getCurrentStock($produk->id));
+    }
+
+    /** @test */
+    public function pembatalan_pembelian_membuat_stock_movement_negatif(): void
+    {
+        $produk = $this->buatProduk('Lem Kertas', 3000, 5000, 0);
+
+        $purchase = $this->buatPurchaseDenganItem($produk, 40, 3000);
+
+        $this->inventoryService->processPurchase($purchase);
+        $this->inventoryService->reversePurchase($purchase);
+
+        // Ada 2 movement: purchase (+40) dan reverse (-40)
+        $movements = StockMovement::where('product_id', $produk->id)->get();
+        $this->assertCount(2, $movements);
+
+        // Total stok = 0
+        $this->assertEquals(0, StockMovement::getCurrentStock($produk->id));
+    }
+
+    // ==========================================
+    // TEST HARGA BELI RATA-RATA
+    // ==========================================
+
+    /** @test */
+    public function average_buy_price_dihitung_dari_semua_pembelian(): void
+    {
+        $produk = $this->buatProduk('Kertas A4', 35000, 45000, 0);
+
+        // Pembelian pertama: 10 rim @ 35000
+        $purchase1 = $this->buatPurchaseDenganItem($produk, 10, 35000);
+        $this->inventoryService->processPurchase($purchase1);
+
+        // Pembelian kedua: 10 rim @ 40000 (harga naik)
+        $purchase2 = $this->buatPurchaseDenganItem($produk, 10, 40000);
+        $this->inventoryService->processPurchase($purchase2);
+
+        // Average = (350000 + 400000) / 20 = 37500
+        $avgPrice = StockMovement::getAverageBuyPrice($produk->id);
+
+        $this->assertEquals(37500, $avgPrice);
+    }
+
+    /** @test */
+    public function average_buy_price_hanya_dari_pembelian_dan_adjustment_in(): void
+    {
+        $produk = $this->buatProduk('Amplop', 500, 1000, 0);
+
+        // Pembelian: 100 @ 500
+        $purchase = $this->buatPurchaseDenganItem($produk, 100, 500);
+        $this->inventoryService->processPurchase($purchase);
+
+        // Simulasi penjualan (tidak mempengaruhi average buy price)
+        StockMovement::create([
+            'product_id' => $produk->id,
+            'movement_type' => StockMovement::TYPE_SALE,
+            'quantity' => -20,
+            'unit_price' => 1000, // Ini harga jual, bukan beli
+            'total_price' => 20000,
+            'quantity_before' => 100,
+            'quantity_after' => 80,
+        ]);
+
+        // Average masih berdasarkan harga beli (500)
+        $avgPrice = StockMovement::getAverageBuyPrice($produk->id);
+
+        $this->assertEquals(500, $avgPrice);
+    }
+
+    // ==========================================
+    // TEST STATUS PURCHASE
+    // ==========================================
+
+    /** @test */
+    public function purchase_memiliki_berbagai_status(): void
     {
         $purchase = Purchase::create([
-            'supplier_name' => 'Pending Supplier',
+            'supplier_name' => 'Supplier Test',
             'purchase_date' => now(),
             'status' => 'pending',
         ]);
 
         $this->assertEquals('pending', $purchase->status);
-    }
 
-    /** @test */
-    public function purchase_bisa_berstatus_received(): void
-    {
-        $purchase = Purchase::create([
-            'supplier_name' => 'Received Supplier',
-            'purchase_date' => now(),
-            'status' => 'received',
-        ]);
+        $purchase->update(['status' => 'received']);
+        $this->assertEquals('received', $purchase->fresh()->status);
 
-        $this->assertEquals('received', $purchase->status);
-    }
-
-    /** @test */
-    public function purchase_bisa_berstatus_cancelled(): void
-    {
-        $purchase = Purchase::create([
-            'supplier_name' => 'Cancelled Supplier',
-            'purchase_date' => now(),
-            'status' => 'cancelled',
-        ]);
-
-        $this->assertEquals('cancelled', $purchase->status);
+        $purchase->update(['status' => 'cancelled']);
+        $this->assertEquals('cancelled', $purchase->fresh()->status);
     }
 
     // ==========================================
-    // TEST INTEGRASI DENGAN INVENTORY
+    // TEST SUPPLIER
     // ==========================================
 
     /** @test */
-    public function purchase_received_menambah_stok_inventory(): void
+    public function purchase_menyimpan_informasi_supplier(): void
     {
-        $this->actingAs($this->user);
-
-        $stokAwalProduk1 = $this->produk1->stock; // 20
-        $stokAwalProduk2 = $this->produk2->stock; // 30
-        $jumlahBeliProduk1 = 50;
-        $jumlahBeliProduk2 = 40;
-
         $purchase = Purchase::create([
-            'supplier_name' => 'Stock Update Supplier',
-            'purchase_date' => now(),
-            'status' => 'received',
-        ]);
-
-        PurchaseItem::create([
-            'purchase_id' => $purchase->id,
-            'product_id' => $this->produk1->id,
-            'barcode' => $this->produk1->barcode,
-            'quantity' => $jumlahBeliProduk1,
-            'purchase_price' => 8000,
-            'total_price' => 400000,
-        ]);
-
-        PurchaseItem::create([
-            'purchase_id' => $purchase->id,
-            'product_id' => $this->produk2->id,
-            'barcode' => $this->produk2->barcode,
-            'quantity' => $jumlahBeliProduk2,
-            'purchase_price' => 10000,
-            'total_price' => 400000,
-        ]);
-
-        $purchase->load('items.product');
-
-        // Proses pembelian dengan inventory service
-        $inventoryService = new InventoryService();
-        $inventoryService->processPurchase($purchase);
-
-        // Refresh data
-        $this->produk1->refresh();
-        $this->produk2->refresh();
-
-        $inventoryProduk1 = Inventory::where('product_id', $this->produk1->id)->first();
-        $inventoryProduk2 = Inventory::where('product_id', $this->produk2->id)->first();
-
-        // Verifikasi stok bertambah
-        $this->assertEquals($stokAwalProduk1 + $jumlahBeliProduk1, $inventoryProduk1->quantity); // 70
-        $this->assertEquals($stokAwalProduk2 + $jumlahBeliProduk2, $inventoryProduk2->quantity); // 70
-    }
-
-    /** @test */
-    public function purchase_membuat_adjustment_record(): void
-    {
-        $this->actingAs($this->user);
-
-        $purchase = Purchase::create([
-            'supplier_name' => 'Adjustment Record Supplier',
-            'purchase_date' => now(),
-            'status' => 'received',
-        ]);
-
-        PurchaseItem::create([
-            'purchase_id' => $purchase->id,
-            'product_id' => $this->produk1->id,
-            'barcode' => $this->produk1->barcode,
-            'quantity' => 25,
-            'purchase_price' => 8000,
-            'total_price' => 200000,
-        ]);
-
-        $purchase->load('items.product');
-
-        $inventoryService = new InventoryService();
-        $inventoryService->processPurchase($purchase);
-
-        // Cek adjustment tercatat
-        $adjustment = InventoryAdjustment::where('product_id', $this->produk1->id)
-            ->where('reference_type', 'purchase')
-            ->where('reference_id', $purchase->id)
-            ->first();
-
-        $this->assertNotNull($adjustment);
-        $this->assertEquals(InventoryAdjustment::TYPE_PURCHASE, $adjustment->type);
-        $this->assertEquals(25, $adjustment->quantity_change);
-        $this->assertStringContains('Adjustment Record Supplier', $adjustment->reason);
-    }
-
-    // ==========================================
-    // TEST DATA SUPPLIER
-    // ==========================================
-
-    /** @test */
-    public function purchase_menyimpan_nama_supplier(): void
-    {
-        $namaSupplier = 'PT Sumber Rezeki Makmur';
-
-        $purchase = Purchase::create([
-            'supplier_name' => $namaSupplier,
-            'purchase_date' => now(),
-            'status' => 'received',
-        ]);
-
-        $this->assertEquals($namaSupplier, $purchase->supplier_name);
-    }
-
-    /** @test */
-    public function purchase_menyimpan_tanggal_pembelian(): void
-    {
-        $tanggal = now()->subDays(3);
-
-        $purchase = Purchase::create([
-            'supplier_name' => 'Date Test Supplier',
-            'purchase_date' => $tanggal,
-            'status' => 'received',
-        ]);
-
-        $this->assertEquals(
-            $tanggal->toDateString(),
-            $purchase->purchase_date instanceof \Carbon\Carbon
-                ? $purchase->purchase_date->toDateString()
-                : \Carbon\Carbon::parse($purchase->purchase_date)->toDateString()
-        );
-    }
-
-    /** @test */
-    public function purchase_bisa_menyimpan_catatan(): void
-    {
-        $catatan = 'Barang dikirim via ekspedisi JNE, estimasi 3 hari kerja';
-
-        $purchase = Purchase::create([
-            'supplier_name' => 'Notes Test Supplier',
+            'supplier_name' => 'PT Pena Jaya',
+            'notes' => 'Catatan pembelian',
             'purchase_date' => now(),
             'status' => 'pending',
-            'notes' => $catatan,
         ]);
 
-        $this->assertEquals($catatan, $purchase->notes);
-    }
-
-    /** @test */
-    public function purchase_bisa_menyimpan_reference(): void
-    {
-        $reference = 'PO-2026-001';
-
-        $purchase = Purchase::create([
-            'supplier_name' => 'Reference Test Supplier',
-            'purchase_date' => now(),
-            'status' => 'received',
-            'reference' => $reference,
-        ]);
-
-        $this->assertEquals($reference, $purchase->reference);
+        $this->assertEquals('PT Pena Jaya', $purchase->supplier_name);
+        $this->assertEquals('Catatan pembelian', $purchase->notes);
     }
 
     // ==========================================
-    // TEST SKENARIO BISNIS
+    // TEST PRODUK BARU DARI PEMBELIAN
     // ==========================================
 
     /** @test */
-    public function skenario_restock_produk_habis(): void
+    public function pembelian_produk_baru_membuat_inventory(): void
     {
-        $this->actingAs($this->user);
+        // Produk baru tanpa inventory
+        $produk = Product::create([
+            'barcode' => 'NEW001',
+            'title' => 'Produk Baru',
+            'description' => 'Produk baru deskripsi',
+            'category_id' => $this->kategori->id,
+            'buy_price' => 10000,
+            'sell_price' => 15000,
+            'stock' => 0,
+        ]);
 
-        // Set stok produk ke 0
-        $this->produk1->update(['stock' => 0]);
-        $inventory = Inventory::where('product_id', $this->produk1->id)->first();
-        $inventory->update(['quantity' => 0]);
+        $this->assertNull($produk->inventory);
 
-        $this->assertEquals(0, $this->produk1->fresh()->stock);
-        $this->assertEquals(0, $inventory->fresh()->quantity);
+        // Beli produk baru
+        $purchase = $this->buatPurchaseDenganItem($produk, 50, 10000);
+        $this->inventoryService->processPurchase($purchase);
 
-        // Lakukan pembelian untuk restock
-        $jumlahRestock = 100;
+        // Stok bertambah via stock movement
+        $this->assertEquals(50, StockMovement::getCurrentStock($produk->id));
+    }
 
+    // ==========================================
+    // HELPER METHODS
+    // ==========================================
+
+    private function buatProduk(string $title, int $buyPrice, int $sellPrice, int $stock): Product
+    {
+        static $counter = 0;
+        $counter++;
+
+        return Product::create([
+            'barcode' => 'ATK' . str_pad($counter, 3, '0', STR_PAD_LEFT),
+            'title' => $title,
+            'description' => $title . ' deskripsi',
+            'category_id' => $this->kategori->id,
+            'buy_price' => $buyPrice,
+            'sell_price' => $sellPrice,
+            'stock' => $stock,
+        ]);
+    }
+
+    private function buatInventory(Product $produk): Inventory
+    {
+        return Inventory::create([
+            'product_id' => $produk->id,
+            'barcode' => $produk->barcode,
+            'quantity' => $produk->stock,
+        ]);
+    }
+
+    private function buatInitialMovement(Product $produk, int $quantity, int $unitPrice): StockMovement
+    {
+        return StockMovement::create([
+            'product_id' => $produk->id,
+            'movement_type' => StockMovement::TYPE_PURCHASE,
+            'quantity' => $quantity,
+            'unit_price' => $unitPrice,
+            'total_price' => $quantity * $unitPrice,
+            'quantity_before' => 0,
+            'quantity_after' => $quantity,
+        ]);
+    }
+
+    private function buatPurchaseDenganItem(Product $produk, int $quantity, int $price): Purchase
+    {
         $purchase = Purchase::create([
-            'supplier_name' => 'Emergency Restock Supplier',
+            'supplier_name' => 'Supplier Test',
             'purchase_date' => now(),
             'status' => 'received',
         ]);
 
         PurchaseItem::create([
             'purchase_id' => $purchase->id,
-            'product_id' => $this->produk1->id,
-            'barcode' => $this->produk1->barcode,
-            'quantity' => $jumlahRestock,
-            'purchase_price' => 8000,
-            'total_price' => 800000,
+            'product_id' => $produk->id,
+            'barcode' => $produk->barcode,
+            'quantity' => $quantity,
+            'purchase_price' => $price,
+            'total_price' => $quantity * $price,
         ]);
 
         $purchase->load('items.product');
 
-        $inventoryService = new InventoryService();
-        $inventoryService->processPurchase($purchase);
-
-        // Verifikasi stok sudah terisi kembali
-        $this->produk1->refresh();
-        $inventory->refresh();
-
-        $this->assertEquals($jumlahRestock, $this->produk1->stock);
-        $this->assertEquals($jumlahRestock, $inventory->quantity);
-    }
-
-    /** @test */
-    public function skenario_pembelian_multi_produk(): void
-    {
-        $this->actingAs($this->user);
-
-        $stokAwal1 = $this->produk1->stock;
-        $stokAwal2 = $this->produk2->stock;
-
-        $purchase = Purchase::create([
-            'supplier_name' => 'Bulk Order Supplier',
-            'purchase_date' => now(),
-            'status' => 'received',
-            'notes' => 'Order bulk untuk stok bulanan',
-        ]);
-
-        // Order 3 produk berbeda dalam 1 PO
-        $items = [
-            ['product' => $this->produk1, 'qty' => 100],
-            ['product' => $this->produk2, 'qty' => 75],
-        ];
-
-        foreach ($items as $itemData) {
-            PurchaseItem::create([
-                'purchase_id' => $purchase->id,
-                'product_id' => $itemData['product']->id,
-                'barcode' => $itemData['product']->barcode,
-                'quantity' => $itemData['qty'],
-                'purchase_price' => $itemData['product']->buy_price,
-                'total_price' => $itemData['product']->buy_price * $itemData['qty'],
-            ]);
-        }
-
-        $purchase->load('items.product');
-
-        $inventoryService = new InventoryService();
-        $inventoryService->processPurchase($purchase);
-
-        // Verifikasi semua produk ter-update
-        $this->produk1->refresh();
-        $this->produk2->refresh();
-
-        $inv1 = Inventory::where('product_id', $this->produk1->id)->first();
-        $inv2 = Inventory::where('product_id', $this->produk2->id)->first();
-
-        $this->assertEquals($stokAwal1 + 100, $inv1->quantity);
-        $this->assertEquals($stokAwal2 + 75, $inv2->quantity);
-
-        // Verifikasi jumlah adjustment = jumlah item
-        $adjustmentCount = InventoryAdjustment::where('reference_type', 'purchase')
-            ->where('reference_id', $purchase->id)
-            ->count();
-
-        $this->assertEquals(2, $adjustmentCount);
-    }
-
-    /**
-     * Custom assertion untuk string contains
-     */
-    protected function assertStringContains(string $needle, string $haystack): void
-    {
-        $this->assertTrue(
-            str_contains($haystack, $needle),
-            "Failed asserting that '$haystack' contains '$needle'"
-        );
+        return $purchase;
     }
 }

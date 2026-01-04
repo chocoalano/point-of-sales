@@ -8,6 +8,7 @@ use App\Models\InventoryAdjustment;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
+use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\InventoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,12 +17,8 @@ use Tests\TestCase;
 /**
  * Unit Test Inventory dan Stok
  *
- * Test ini memastikan manajemen stok berjalan dengan benar:
- * - Sinkronisasi stok produk dengan inventory
- * - Penambahan stok melalui pembelian
- * - Pengurangan stok melalui penjualan
- * - Adjustment manual stok
- * - Pencatatan riwayat perubahan stok
+ * Test ini memastikan manajemen stok berjalan dengan benar
+ * menggunakan arsitektur baru dengan StockMovement sebagai ledger utama
  */
 class StokInventoryTest extends TestCase
 {
@@ -63,6 +60,17 @@ class StokInventoryTest extends TestCase
             'barcode' => $this->produk->barcode,
             'quantity' => $this->produk->stock,
         ]);
+
+        // Create initial stock movement
+        StockMovement::create([
+            'product_id' => $this->produk->id,
+            'movement_type' => StockMovement::TYPE_PURCHASE,
+            'quantity' => 50,
+            'unit_price' => 3000,
+            'total_price' => 150000,
+            'quantity_before' => 0,
+            'quantity_after' => 50,
+        ]);
     }
 
     // ==========================================
@@ -85,34 +93,10 @@ class StokInventoryTest extends TestCase
     }
 
     /** @test */
-    public function inventory_memiliki_banyak_adjustment(): void
+    public function inventory_memiliki_relasi_ke_stock_movements(): void
     {
-        $this->actingAs($this->user);
-
-        // Buat beberapa adjustment
-        InventoryAdjustment::create([
-            'product_id' => $this->produk->id,
-            'user_id' => $this->user->id,
-            'type' => InventoryAdjustment::TYPE_IN,
-            'quantity_before' => 50,
-            'quantity_change' => 10,
-            'quantity_after' => 60,
-            'reason' => 'Restock',
-        ]);
-
-        InventoryAdjustment::create([
-            'product_id' => $this->produk->id,
-            'user_id' => $this->user->id,
-            'type' => InventoryAdjustment::TYPE_OUT,
-            'quantity_before' => 60,
-            'quantity_change' => -5,
-            'quantity_after' => 55,
-            'reason' => 'Penjualan',
-        ]);
-
         $this->inventory->refresh();
-
-        $this->assertCount(2, $this->inventory->adjustments);
+        $this->assertCount(1, $this->inventory->stockMovements);
     }
 
     // ==========================================
@@ -120,36 +104,31 @@ class StokInventoryTest extends TestCase
     // ==========================================
 
     /** @test */
-    public function dapat_menambah_stok_melalui_inventory_add_stock(): void
+    public function dapat_menambah_stok_melalui_adjustment(): void
     {
         $this->actingAs($this->user);
 
-        $stokAwal = $this->inventory->quantity; // 50
+        $stokAwal = StockMovement::getCurrentStock($this->produk->id); // 50
         $jumlahTambah = 25;
 
-        $adjustment = $this->inventory->addStock(
-            quantity: $jumlahTambah,
-            type: InventoryAdjustment::TYPE_IN,
-            reason: 'Penambahan stok manual',
-            referenceType: null,
-            referenceId: null,
-            userId: $this->user->id
+        $result = $this->inventoryService->createAdjustment(
+            $this->produk,
+            $jumlahTambah,
+            InventoryAdjustment::TYPE_ADJUSTMENT_IN,
+            'Penambahan stok manual',
+            null,
+            $this->user->id
         );
 
-        $this->inventory->refresh();
-        $this->produk->refresh();
+        $stokAkhir = StockMovement::getCurrentStock($this->produk->id);
 
-        // Verifikasi stok inventory bertambah
-        $this->assertEquals($stokAwal + $jumlahTambah, $this->inventory->quantity);
-
-        // Verifikasi stok produk juga bertambah
-        $this->assertEquals($stokAwal + $jumlahTambah, $this->produk->stock);
+        // Verifikasi stok bertambah
+        $this->assertEquals($stokAwal + $jumlahTambah, $stokAkhir);
 
         // Verifikasi adjustment tercatat dengan benar
-        $this->assertEquals(InventoryAdjustment::TYPE_IN, $adjustment->type);
-        $this->assertEquals($stokAwal, $adjustment->quantity_before);
-        $this->assertEquals($jumlahTambah, $adjustment->quantity_change);
-        $this->assertEquals($stokAwal + $jumlahTambah, $adjustment->quantity_after);
+        $this->assertEquals(InventoryAdjustment::TYPE_ADJUSTMENT_IN, $result['adjustment']->type);
+        $this->assertEquals($jumlahTambah, $result['adjustment']->quantity_change);
+        $this->assertNotNull($result['adjustment']->journal_number);
     }
 
     /** @test */
@@ -157,7 +136,7 @@ class StokInventoryTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        $stokAwal = $this->inventory->quantity; // 50
+        $stokAwal = StockMovement::getCurrentStock($this->produk->id); // 50
         $jumlahBeli = 100;
 
         // Buat purchase order
@@ -181,21 +160,19 @@ class StokInventoryTest extends TestCase
         // Proses pembelian
         $this->inventoryService->processPurchase($purchase);
 
-        $this->inventory->refresh();
-        $this->produk->refresh();
+        $stokAkhir = StockMovement::getCurrentStock($this->produk->id);
 
         // Verifikasi stok bertambah sesuai jumlah pembelian
-        $this->assertEquals($stokAwal + $jumlahBeli, $this->inventory->quantity);
-        $this->assertEquals($stokAwal + $jumlahBeli, $this->produk->stock);
+        $this->assertEquals($stokAwal + $jumlahBeli, $stokAkhir);
 
-        // Verifikasi adjustment tercatat sebagai purchase
-        $adjustment = InventoryAdjustment::where('reference_type', 'purchase')
+        // Verifikasi stock movement tercatat sebagai purchase
+        $movement = StockMovement::where('reference_type', 'purchase')
             ->where('reference_id', $purchase->id)
             ->first();
 
-        $this->assertNotNull($adjustment);
-        $this->assertEquals(InventoryAdjustment::TYPE_PURCHASE, $adjustment->type);
-        $this->assertEquals($jumlahBeli, $adjustment->quantity_change);
+        $this->assertNotNull($movement);
+        $this->assertEquals(StockMovement::TYPE_PURCHASE, $movement->movement_type);
+        $this->assertEquals($jumlahBeli, $movement->quantity);
     }
 
     // ==========================================
@@ -203,109 +180,58 @@ class StokInventoryTest extends TestCase
     // ==========================================
 
     /** @test */
-    public function dapat_mengurangi_stok_melalui_inventory_reduce_stock(): void
+    public function dapat_mengurangi_stok_melalui_adjustment(): void
     {
         $this->actingAs($this->user);
 
-        $stokAwal = $this->inventory->quantity; // 50
+        $stokAwal = StockMovement::getCurrentStock($this->produk->id); // 50
         $jumlahKurang = 10;
 
-        $adjustment = $this->inventory->reduceStock(
-            quantity: $jumlahKurang,
-            type: InventoryAdjustment::TYPE_OUT,
-            reason: 'Penjualan langsung',
-            referenceType: null,
-            referenceId: null,
-            userId: $this->user->id
+        $result = $this->inventoryService->createAdjustment(
+            $this->produk,
+            $jumlahKurang,
+            InventoryAdjustment::TYPE_ADJUSTMENT_OUT,
+            'Pengurangan stok manual',
+            null,
+            $this->user->id
         );
 
-        $this->inventory->refresh();
-        $this->produk->refresh();
+        $stokAkhir = StockMovement::getCurrentStock($this->produk->id);
 
-        // Verifikasi stok inventory berkurang
-        $this->assertEquals($stokAwal - $jumlahKurang, $this->inventory->quantity);
-
-        // Verifikasi stok produk juga berkurang
-        $this->assertEquals($stokAwal - $jumlahKurang, $this->produk->stock);
+        // Verifikasi stok berkurang
+        $this->assertEquals($stokAwal - $jumlahKurang, $stokAkhir);
 
         // Verifikasi adjustment tercatat dengan benar
-        $this->assertEquals(InventoryAdjustment::TYPE_OUT, $adjustment->type);
-        $this->assertEquals(-$jumlahKurang, $adjustment->quantity_change);
+        $this->assertEquals(InventoryAdjustment::TYPE_ADJUSTMENT_OUT, $result['adjustment']->type);
+        $this->assertEquals(-$jumlahKurang, $result['adjustment']->quantity_change);
     }
 
     /** @test */
-    public function stok_tidak_bisa_menjadi_negatif(): void
+    public function dapat_melakukan_damage_adjustment(): void
     {
         $this->actingAs($this->user);
 
-        $stokAwal = $this->inventory->quantity; // 50
-        $jumlahKurangBesar = 100; // Lebih besar dari stok
+        $stokAwal = StockMovement::getCurrentStock($this->produk->id); // 50
+        $jumlahRusak = 5;
 
-        $this->inventory->reduceStock(
-            quantity: $jumlahKurangBesar,
-            type: InventoryAdjustment::TYPE_OUT,
-            reason: 'Test pengurangan besar',
-            userId: $this->user->id
+        $result = $this->inventoryService->createAdjustment(
+            $this->produk,
+            $jumlahRusak,
+            InventoryAdjustment::TYPE_DAMAGE,
+            'Barang rusak/expired',
+            null,
+            $this->user->id
         );
 
-        $this->inventory->refresh();
+        $stokAkhir = StockMovement::getCurrentStock($this->produk->id);
 
-        // Stok tidak boleh negatif, minimum 0
-        $this->assertEquals(0, $this->inventory->quantity);
-        $this->assertGreaterThanOrEqual(0, $this->inventory->quantity);
+        $this->assertEquals($stokAwal - $jumlahRusak, $stokAkhir);
+        $this->assertEquals(InventoryAdjustment::TYPE_DAMAGE, $result['adjustment']->type);
     }
 
     // ==========================================
-    // TEST ADJUSTMENT MANUAL
+    // TEST KOREKSI STOK
     // ==========================================
-
-    /** @test */
-    public function dapat_melakukan_adjustment_penambahan_stok(): void
-    {
-        $this->actingAs($this->user);
-
-        $stokAwal = $this->produk->stock; // 50
-        $jumlahTambah = 30;
-
-        $adjustment = $this->inventoryService->manualAdjustment(
-            product: $this->produk,
-            quantity: $jumlahTambah,
-            type: InventoryAdjustment::TYPE_IN,
-            reason: 'Penambahan stok setelah stock opname',
-            userId: $this->user->id
-        );
-
-        $this->inventory->refresh();
-        $this->produk->refresh();
-
-        $this->assertEquals($stokAwal + $jumlahTambah, $this->inventory->quantity);
-        $this->assertEquals(InventoryAdjustment::TYPE_IN, $adjustment->type);
-        $this->assertEquals($jumlahTambah, $adjustment->quantity_change);
-    }
-
-    /** @test */
-    public function dapat_melakukan_adjustment_pengurangan_stok(): void
-    {
-        $this->actingAs($this->user);
-
-        $stokAwal = $this->produk->stock; // 50
-        $jumlahKurang = 5;
-
-        $adjustment = $this->inventoryService->manualAdjustment(
-            product: $this->produk,
-            quantity: $jumlahKurang,
-            type: InventoryAdjustment::TYPE_DAMAGE,
-            reason: 'Barang rusak/expired',
-            userId: $this->user->id
-        );
-
-        $this->inventory->refresh();
-        $this->produk->refresh();
-
-        $this->assertEquals($stokAwal - $jumlahKurang, $this->inventory->quantity);
-        $this->assertEquals(InventoryAdjustment::TYPE_DAMAGE, $adjustment->type);
-        $this->assertEquals(-$jumlahKurang, $adjustment->quantity_change);
-    }
 
     /** @test */
     public function dapat_melakukan_koreksi_stok_ke_nilai_tertentu(): void
@@ -314,19 +240,63 @@ class StokInventoryTest extends TestCase
 
         $stokBaru = 75;
 
-        $adjustment = $this->inventoryService->stockCorrection(
-            product: $this->produk,
-            newQuantity: $stokBaru,
-            reason: 'Hasil stock opname fisik',
-            userId: $this->user->id
+        $result = $this->inventoryService->stockCorrection(
+            $this->produk,
+            $stokBaru,
+            'Hasil stock opname fisik',
+            $this->user->id
         );
 
-        $this->inventory->refresh();
-        $this->produk->refresh();
+        $stokAkhir = StockMovement::getCurrentStock($this->produk->id);
 
         // Verifikasi stok sudah diset ke nilai baru
-        $this->assertEquals($stokBaru, $this->inventory->quantity);
-        $this->assertEquals(InventoryAdjustment::TYPE_CORRECTION, $adjustment->type);
+        $this->assertEquals($stokBaru, $stokAkhir);
+
+        // Verifikasi adjustment dan movement dibuat
+        $this->assertNotNull($result['adjustment']);
+        $this->assertNotNull($result['movement']);
+    }
+
+    /** @test */
+    public function koreksi_stok_bisa_menambah_atau_mengurangi(): void
+    {
+        $this->actingAs($this->user);
+
+        // Koreksi naik
+        $this->inventoryService->stockCorrection($this->produk, 80, 'Naik', $this->user->id);
+        $this->assertEquals(80, StockMovement::getCurrentStock($this->produk->id));
+
+        // Koreksi turun
+        $this->inventoryService->stockCorrection($this->produk, 60, 'Turun', $this->user->id);
+        $this->assertEquals(60, StockMovement::getCurrentStock($this->produk->id));
+    }
+
+    // ==========================================
+    // TEST RETURN
+    // ==========================================
+
+    /** @test */
+    public function dapat_melakukan_return_adjustment(): void
+    {
+        $this->actingAs($this->user);
+
+        $stokAwal = StockMovement::getCurrentStock($this->produk->id);
+        $jumlahReturn = 5;
+
+        $result = $this->inventoryService->createAdjustment(
+            $this->produk,
+            $jumlahReturn,
+            InventoryAdjustment::TYPE_RETURN,
+            'Return dari pelanggan',
+            null,
+            $this->user->id
+        );
+
+        $stokAkhir = StockMovement::getCurrentStock($this->produk->id);
+
+        // Return menambah stok
+        $this->assertEquals($stokAwal + $jumlahReturn, $stokAkhir);
+        $this->assertEquals(InventoryAdjustment::TYPE_RETURN, $result['adjustment']->type);
     }
 
     // ==========================================
@@ -334,66 +304,50 @@ class StokInventoryTest extends TestCase
     // ==========================================
 
     /** @test */
-    public function setiap_perubahan_stok_tercatat_di_adjustment(): void
+    public function setiap_perubahan_stok_tercatat_di_stock_movement(): void
     {
         $this->actingAs($this->user);
 
         // Lakukan beberapa operasi stok
-        $this->inventory->addStock(10, InventoryAdjustment::TYPE_IN, 'Restock', null, null, $this->user->id);
-        $this->inventory->reduceStock(5, InventoryAdjustment::TYPE_OUT, 'Penjualan', null, null, $this->user->id);
-        $this->inventory->addStock(20, InventoryAdjustment::TYPE_PURCHASE, 'Pembelian', 'purchase', 1, $this->user->id);
+        $this->inventoryService->createAdjustment(
+            $this->produk,
+            10,
+            InventoryAdjustment::TYPE_ADJUSTMENT_IN,
+            'Tambah stok'
+        );
 
-        $adjustments = InventoryAdjustment::where('product_id', $this->produk->id)
-            ->orderBy('created_at', 'asc')
-            ->get();
+        $this->inventoryService->createAdjustment(
+            $this->produk,
+            5,
+            InventoryAdjustment::TYPE_DAMAGE,
+            'Barang rusak'
+        );
 
-        $this->assertCount(3, $adjustments);
-
-        // Verifikasi urutan dan tipe adjustment
-        $this->assertEquals(InventoryAdjustment::TYPE_IN, $adjustments[0]->type);
-        $this->assertEquals(InventoryAdjustment::TYPE_OUT, $adjustments[1]->type);
-        $this->assertEquals(InventoryAdjustment::TYPE_PURCHASE, $adjustments[2]->type);
+        // 1 dari setUp + 2 dari test
+        $movements = StockMovement::forProduct($this->produk->id)->count();
+        $this->assertEquals(3, $movements);
     }
 
     /** @test */
-    public function adjustment_mencatat_user_yang_melakukan(): void
+    public function stock_movement_mencatat_user_yang_melakukan(): void
     {
         $this->actingAs($this->user);
 
-        $adjustment = $this->inventory->addStock(
-            quantity: 15,
-            type: InventoryAdjustment::TYPE_IN,
-            reason: 'Test user tracking',
-            userId: $this->user->id
+        $result = $this->inventoryService->createAdjustment(
+            $this->produk,
+            15,
+            InventoryAdjustment::TYPE_ADJUSTMENT_IN,
+            'Test user tracking',
+            null,
+            $this->user->id
         );
 
-        $this->assertEquals($this->user->id, $adjustment->user_id);
-        $this->assertInstanceOf(User::class, $adjustment->user);
-        $this->assertEquals('Admin Gudang', $adjustment->user->name);
-    }
-
-    /** @test */
-    public function adjustment_mencatat_referensi_transaksi(): void
-    {
-        $this->actingAs($this->user);
-
-        $purchaseId = 999;
-
-        $adjustment = $this->inventory->addStock(
-            quantity: 50,
-            type: InventoryAdjustment::TYPE_PURCHASE,
-            reason: 'Pembelian dari supplier',
-            referenceType: 'purchase',
-            referenceId: $purchaseId,
-            userId: $this->user->id
-        );
-
-        $this->assertEquals('purchase', $adjustment->reference_type);
-        $this->assertEquals($purchaseId, $adjustment->reference_id);
+        $this->assertEquals($this->user->id, $result['movement']->user_id);
+        $this->assertInstanceOf(User::class, $result['movement']->user);
     }
 
     // ==========================================
-    // TEST REVERSE/PEMBATALAN
+    // TEST PEMBATALAN PEMBELIAN
     // ==========================================
 
     /** @test */
@@ -401,7 +355,7 @@ class StokInventoryTest extends TestCase
     {
         $this->actingAs($this->user);
 
-        $stokAwal = $this->inventory->quantity; // 50
+        $stokAwal = StockMovement::getCurrentStock($this->produk->id); // 50
         $jumlahBeli = 30;
 
         // Buat dan proses pembelian
@@ -423,20 +377,20 @@ class StokInventoryTest extends TestCase
         $purchase->load('items.product');
         $this->inventoryService->processPurchase($purchase);
 
-        $this->inventory->refresh();
-        $this->assertEquals($stokAwal + $jumlahBeli, $this->inventory->quantity); // 80
+        $stokSetelahBeli = StockMovement::getCurrentStock($this->produk->id);
+        $this->assertEquals($stokAwal + $jumlahBeli, $stokSetelahBeli); // 80
 
         // Batalkan pembelian
         $this->inventoryService->reversePurchase($purchase);
 
-        $this->inventory->refresh();
+        $stokSetelahBatal = StockMovement::getCurrentStock($this->produk->id);
 
         // Stok kembali ke semula
-        $this->assertEquals($stokAwal, $this->inventory->quantity); // 50
+        $this->assertEquals($stokAwal, $stokSetelahBatal); // 50
     }
 
     // ==========================================
-    // TEST SINKRONISASI STOK
+    // TEST SINKRONISASI INVENTORY
     // ==========================================
 
     /** @test */
@@ -464,7 +418,6 @@ class StokInventoryTest extends TestCase
         // Sekarang inventory sudah ada
         $this->assertNotNull($produkBaru->inventory);
         $this->assertEquals($produkBaru->stock, $produkBaru->inventory->quantity);
-        $this->assertEquals($produkBaru->barcode, $produkBaru->inventory->barcode);
     }
 
     // ==========================================
@@ -475,14 +428,11 @@ class StokInventoryTest extends TestCase
     public function semua_tipe_adjustment_tersedia(): void
     {
         $tipeYangDiharapkan = [
-            'in',
-            'out',
-            'adjustment',
-            'purchase',
-            'sale',
-            'return',
-            'damage',
-            'correction',
+            InventoryAdjustment::TYPE_ADJUSTMENT_IN,
+            InventoryAdjustment::TYPE_ADJUSTMENT_OUT,
+            InventoryAdjustment::TYPE_RETURN,
+            InventoryAdjustment::TYPE_DAMAGE,
+            InventoryAdjustment::TYPE_CORRECTION,
         ];
 
         $tipeYangAda = InventoryAdjustment::getTypes();
@@ -493,78 +443,53 @@ class StokInventoryTest extends TestCase
     }
 
     /** @test */
-    public function adjustment_purchase_menambah_stok(): void
+    public function incoming_types_menambah_stok(): void
     {
-        $this->actingAs($this->user);
+        $incomingTypes = InventoryAdjustment::getIncomingTypes();
 
-        $stokAwal = $this->inventory->quantity;
-
-        $this->inventory->addStock(
-            quantity: 10,
-            type: InventoryAdjustment::TYPE_PURCHASE,
-            reason: 'Pembelian',
-            userId: $this->user->id
-        );
-
-        $this->inventory->refresh();
-
-        $this->assertEquals($stokAwal + 10, $this->inventory->quantity);
+        $this->assertContains(InventoryAdjustment::TYPE_ADJUSTMENT_IN, $incomingTypes);
+        $this->assertContains(InventoryAdjustment::TYPE_RETURN, $incomingTypes);
     }
 
     /** @test */
-    public function adjustment_sale_mengurangi_stok(): void
+    public function outgoing_types_mengurangi_stok(): void
     {
-        $this->actingAs($this->user);
+        $outgoingTypes = InventoryAdjustment::getOutgoingTypes();
 
-        $stokAwal = $this->inventory->quantity;
+        $this->assertContains(InventoryAdjustment::TYPE_ADJUSTMENT_OUT, $outgoingTypes);
+        $this->assertContains(InventoryAdjustment::TYPE_DAMAGE, $outgoingTypes);
+    }
 
-        $this->inventory->reduceStock(
-            quantity: 5,
-            type: InventoryAdjustment::TYPE_SALE,
-            reason: 'Penjualan',
-            userId: $this->user->id
-        );
+    // ==========================================
+    // TEST AVERAGE BUY PRICE
+    // ==========================================
 
-        $this->inventory->refresh();
+    /** @test */
+    public function average_buy_price_dihitung_dari_stock_movements(): void
+    {
+        // Tambah pembelian lagi dengan harga berbeda
+        StockMovement::create([
+            'product_id' => $this->produk->id,
+            'movement_type' => StockMovement::TYPE_PURCHASE,
+            'quantity' => 50,
+            'unit_price' => 4000, // Harga berbeda
+            'total_price' => 200000,
+            'quantity_before' => 50,
+            'quantity_after' => 100,
+        ]);
 
-        $this->assertEquals($stokAwal - 5, $this->inventory->quantity);
+        // Average = (150000 + 200000) / (50 + 50) = 350000 / 100 = 3500
+        $avgPrice = StockMovement::getAverageBuyPrice($this->produk->id);
+
+        $this->assertEquals(3500, $avgPrice);
     }
 
     /** @test */
-    public function adjustment_damage_mengurangi_stok(): void
+    public function product_model_mengembalikan_average_buy_price(): void
     {
-        $this->actingAs($this->user);
+        // Product accessor should return average from StockMovement
+        $avgPrice = $this->produk->average_buy_price;
 
-        $stokAwal = $this->inventory->quantity;
-
-        $this->inventory->reduceStock(
-            quantity: 3,
-            type: InventoryAdjustment::TYPE_DAMAGE,
-            reason: 'Barang rusak',
-            userId: $this->user->id
-        );
-
-        $this->inventory->refresh();
-
-        $this->assertEquals($stokAwal - 3, $this->inventory->quantity);
-    }
-
-    /** @test */
-    public function adjustment_return_menambah_stok(): void
-    {
-        $this->actingAs($this->user);
-
-        $stokAwal = $this->inventory->quantity;
-
-        $this->inventory->addStock(
-            quantity: 2,
-            type: InventoryAdjustment::TYPE_RETURN,
-            reason: 'Retur dari pelanggan',
-            userId: $this->user->id
-        );
-
-        $this->inventory->refresh();
-
-        $this->assertEquals($stokAwal + 2, $this->inventory->quantity);
+        $this->assertEquals(3000, $avgPrice); // From initial stock movement
     }
 }

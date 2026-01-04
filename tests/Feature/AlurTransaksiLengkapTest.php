@@ -9,6 +9,7 @@ use App\Models\Inventory;
 use App\Models\InventoryAdjustment;
 use App\Models\Product;
 use App\Models\Profit;
+use App\Models\StockMovement;
 use App\Models\Transaction;
 use App\Models\TransactionDetail;
 use App\Models\User;
@@ -203,11 +204,11 @@ class AlurTransaksiLengkapTest extends TestCase
         $inventoryProduk = Inventory::where('product_id', $this->produk1->id)->first();
         $this->assertEquals($stokAwal - $jumlahBeli, $inventoryProduk->quantity);
 
-        // 5. Adjustment tercatat
-        $this->assertDatabaseHas('inventory_adjustments', [
+        // 5. Stock movement tercatat
+        $this->assertDatabaseHas('stock_movements', [
             'product_id' => $this->produk1->id,
-            'type' => InventoryAdjustment::TYPE_SALE,
-            'quantity_change' => -$jumlahBeli,
+            'movement_type' => StockMovement::TYPE_SALE,
+            'quantity' => -$jumlahBeli,
         ]);
 
         // 6. Cart sudah kosong
@@ -323,12 +324,13 @@ class AlurTransaksiLengkapTest extends TestCase
         // 4. Total profit tercatat
         $this->assertEquals($totalProfit, $transaksi->profits->sum('total'));
 
-        // 5. Adjustment tercatat untuk kedua produk
-        $adjustments = InventoryAdjustment::where('reference_type', 'transaction')
+        // 5. Stock movement tercatat untuk kedua produk
+        $movements = StockMovement::where('reference_type', 'transaction')
             ->where('reference_id', $transaksi->id)
+            ->where('movement_type', StockMovement::TYPE_SALE)
             ->get();
 
-        $this->assertCount(2, $adjustments);
+        $this->assertCount(2, $movements);
     }
 
     // ==========================================
@@ -340,9 +342,27 @@ class AlurTransaksiLengkapTest extends TestCase
     {
         $this->actingAs($this->kasir);
 
+        // === SETUP INITIAL STOCK MOVEMENT ===
+        // Buat stock movement awal agar getCurrentStock() berfungsi dengan benar
+        $inv = Inventory::where('product_id', $this->produk1->id)->first();
+        $stokAwal = (int) $inv->quantity;
+
+        StockMovement::create([
+            'product_id' => $this->produk1->id,
+            'user_id' => $this->kasir->id,
+            'movement_type' => StockMovement::TYPE_PURCHASE,
+            'reference_type' => 'initial',
+            'reference_id' => 0,
+            'quantity' => $stokAwal,
+            'unit_price' => $this->produk1->buy_price,
+            'total_price' => $this->produk1->buy_price * $stokAwal,
+            'quantity_before' => 0,
+            'quantity_after' => $stokAwal,
+            'notes' => 'Initial stock for testing',
+        ]);
+
         // === BUAT TRANSAKSI ===
         $qty = 5;
-        $stokAwal = $this->produk1->stock;
 
         $transaksi = Transaction::create([
             'cashier_id' => $this->kasir->id,
@@ -369,23 +389,24 @@ class AlurTransaksiLengkapTest extends TestCase
         $transaksi->load('details.product');
         $this->inventoryService->processTransaction($transaksi);
 
-        $inv = Inventory::where('product_id', $this->produk1->id)->first();
-        $this->assertEquals($stokAwal - $qty, $inv->quantity);
+        $inv->refresh();
+        $this->assertEquals($stokAwal - $qty, (int) $inv->quantity);
 
         // === BATALKAN TRANSAKSI (REFUND) ===
+        $transaksi->load('details.product');
         $this->inventoryService->reverseTransaction($transaksi);
 
         // === VERIFIKASI STOK KEMBALI ===
         $inv->refresh();
-        $this->assertEquals($stokAwal, $inv->quantity);
+        $this->assertEquals($stokAwal, (int) $inv->quantity);
 
-        // Adjustment return tercatat
-        $returnAdjustment = InventoryAdjustment::where('product_id', $this->produk1->id)
-            ->where('type', InventoryAdjustment::TYPE_RETURN)
+        // Stock movement return tercatat
+        $returnMovement = StockMovement::where('product_id', $this->produk1->id)
+            ->where('movement_type', StockMovement::TYPE_RETURN)
             ->first();
 
-        $this->assertNotNull($returnAdjustment);
-        $this->assertEquals($qty, $returnAdjustment->quantity_change);
+        $this->assertNotNull($returnMovement);
+        $this->assertEquals($qty, (int) $returnMovement->quantity);
     }
 
     // ==========================================
@@ -481,6 +502,10 @@ class AlurTransaksiLengkapTest extends TestCase
         $qty1 = 4;
         $qty2 = 2;
 
+        // Harga beli dari setup
+        $buyPrice1 = 8000;  // buy_price untuk produk1
+        $buyPrice2 = 15000; // buy_price untuk produk2
+
         $transaksi = Transaction::create([
             'cashier_id' => $this->kasir->id,
             'customer_id' => $this->pelanggan->id,
@@ -516,23 +541,29 @@ class AlurTransaksiLengkapTest extends TestCase
         // Profit 1: (12000-8000) x 4 = 16000
         // Profit 2: (22000-15000) x 2 = 14000
         // Total: 30000
+        // Menggunakan harga beli langsung karena buy_price accessor menggunakan average dari StockMovement
         $expectedProfit =
-            ($this->produk1->sell_price - $this->produk1->buy_price) * $qty1 +
-            ($this->produk2->sell_price - $this->produk2->buy_price) * $qty2;
+            ($this->produk1->sell_price - $buyPrice1) * $qty1 +
+            ($this->produk2->sell_price - $buyPrice2) * $qty2;
 
-        Profit::create([
+        $this->assertEquals(30000, $expectedProfit, 'Expected profit calculation is wrong');
+
+        $profit = Profit::create([
             'transaction_id' => $transaksi->id,
             'total' => $expectedProfit,
         ]);
 
-        $transaksi->refresh();
+        // Verifikasi data langsung setelah create
+        $this->assertEquals(30000, $profit->total, 'Profit total right after create');
 
-        // Verifikasi total harga sesuai
-        $totalHargaDetail = $transaksi->details->sum('price');
+        // Verifikasi total harga sesuai dengan query langsung
+        $totalHargaDetail = TransactionDetail::where('transaction_id', $transaksi->id)->sum('price');
         $this->assertEquals(92000, $totalHargaDetail);
 
-        // Verifikasi profit sesuai perhitungan
-        $this->assertEquals(30000, $transaksi->profits->sum('total'));
+        // Verifikasi profit sesuai perhitungan dengan query langsung
+        $profitRecord = Profit::where('transaction_id', $transaksi->id)->first();
+        $this->assertNotNull($profitRecord);
+        $this->assertEquals(30000, $profitRecord->total);
     }
 
     /** @test */

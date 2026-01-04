@@ -7,14 +7,27 @@ use App\Models\InventoryAdjustment;
 use App\Models\Product;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
+use App\Models\StockMovement;
 use App\Models\Transaction;
 use App\Models\TransactionDetail;
 use Illuminate\Support\Facades\DB;
+use Exception;
 
+/**
+ * InventoryService
+ *
+ * Service untuk mengelola pergerakan stok.
+ * Semua pergerakan stok (purchase, sale, adjustment) dicatat di StockMovement.
+ */
 class InventoryService
 {
+    // ==========================================
+    // PURCHASE PROCESSING
+    // ==========================================
+
     /**
      * Process inventory for a purchase (increase stock)
+     * Mencatat ke StockMovement ledger
      */
     public function processPurchase(Purchase $purchase): void
     {
@@ -22,15 +35,31 @@ class InventoryService
             foreach ($purchase->items as $item) {
                 if (!$item->product_id) continue;
 
-                $inventory = Inventory::getOrCreateForProduct($item->product);
+                $product = $item->product;
+                $currentStock = StockMovement::getCurrentStock($item->product_id);
 
-                $inventory->addStock(
-                    quantity: $item->quantity,
-                    type: InventoryAdjustment::TYPE_PURCHASE,
-                    reason: "Purchase from {$purchase->supplier_name}",
-                    referenceType: 'purchase',
-                    referenceId: $purchase->id
-                );
+                // Create stock movement record
+                StockMovement::create([
+                    'product_id' => $item->product_id,
+                    'user_id' => auth()->id(),
+                    'movement_type' => StockMovement::TYPE_PURCHASE,
+                    'reference_type' => 'purchase',
+                    'reference_id' => $purchase->id,
+                    'quantity' => $item->quantity,
+                    'unit_price' => $item->purchase_price,
+                    'total_price' => $item->total_price,
+                    'quantity_before' => $currentStock,
+                    'quantity_after' => $currentStock + $item->quantity,
+                    'notes' => "Purchase from {$purchase->supplier_name}",
+                ]);
+
+                // Update product stock
+                $product->increment('stock', $item->quantity);
+
+                // Update inventory
+                $inventory = Inventory::getOrCreateForProduct($product);
+                $inventory->quantity = $currentStock + $item->quantity;
+                $inventory->save();
             }
         });
     }
@@ -44,18 +73,103 @@ class InventoryService
             foreach ($purchase->items as $item) {
                 if (!$item->product_id) continue;
 
-                $inventory = Inventory::where('product_id', $item->product_id)->first();
-                if (!$inventory) continue;
+                $product = $item->product;
+                $currentStock = StockMovement::getCurrentStock($item->product_id);
 
-                $inventory->reduceStock(
-                    quantity: $item->quantity,
-                    type: InventoryAdjustment::TYPE_CORRECTION,
-                    reason: "Reversed purchase from {$purchase->supplier_name}",
-                    referenceType: 'purchase',
-                    referenceId: $purchase->id
-                );
+                // Create correction movement
+                StockMovement::create([
+                    'product_id' => $item->product_id,
+                    'user_id' => auth()->id(),
+                    'movement_type' => StockMovement::TYPE_CORRECTION,
+                    'reference_type' => 'purchase',
+                    'reference_id' => $purchase->id,
+                    'quantity' => -$item->quantity,
+                    'unit_price' => $item->purchase_price,
+                    'total_price' => -$item->total_price,
+                    'quantity_before' => $currentStock,
+                    'quantity_after' => max(0, $currentStock - $item->quantity),
+                    'notes' => "Reversed purchase from {$purchase->supplier_name}",
+                ]);
+
+                // Update product stock
+                $newStock = max(0, $product->stock - $item->quantity);
+                $product->stock = $newStock;
+                $product->save();
+
+                // Update inventory
+                $inventory = Inventory::where('product_id', $item->product_id)->first();
+                if ($inventory) {
+                    $inventory->quantity = $newStock;
+                    $inventory->save();
+                }
             }
         });
+    }
+
+    // ==========================================
+    // TRANSACTION/SALE PROCESSING
+    // ==========================================
+
+    /**
+     * Validate stock before creating transaction
+     * Returns array with 'valid' boolean and 'errors' array
+     */
+    public function validateStockForTransaction(array $cartItems): array
+    {
+        $errors = [];
+
+        foreach ($cartItems as $item) {
+            // Handle both object and array formats
+            if (is_object($item)) {
+                $productId = $item->product_id ?? null;
+                $product = $item->product ?? ($productId ? Product::find($productId) : null);
+                $requestedQty = $item->quantity;
+            } else {
+                $productId = $item['product_id'] ?? null;
+                $product = $productId ? Product::find($productId) : null;
+                $requestedQty = $item['quantity'] ?? 0;
+            }
+
+            if (!$product) continue;
+
+            $currentStock = StockMovement::getCurrentStock($product->id);
+
+            if ($currentStock <= 0) {
+                $errors[] = [
+                    'product_id' => $product->id,
+                    'product_name' => $product->title,
+                    'message' => "Stok produk '{$product->title}' habis. Tidak dapat melakukan transaksi.",
+                    'available' => $currentStock,
+                    'requested' => $requestedQty,
+                ];
+            } elseif ($currentStock < $requestedQty) {
+                $errors[] = [
+                    'product_id' => $product->id,
+                    'product_name' => $product->title,
+                    'message' => "Stok produk '{$product->title}' tidak mencukupi. Stok tersedia: {$currentStock}, diminta: {$requestedQty}",
+                    'available' => $currentStock,
+                    'requested' => $requestedQty,
+                ];
+            }
+        }
+
+        return [
+            'valid' => empty($errors),
+            'errors' => $errors,
+        ];
+    }
+
+    /**
+     * Validate stock and throw exception if insufficient
+     * Use this when you want to halt execution on validation failure
+     */
+    public function validateStockOrFail(array $cartItems): void
+    {
+        $result = $this->validateStockForTransaction($cartItems);
+
+        if (!$result['valid']) {
+            throw new Exception($result['errors'][0]['message']);
+        }
     }
 
     /**
@@ -67,18 +181,35 @@ class InventoryService
             foreach ($transaction->details as $detail) {
                 if (!$detail->product_id) continue;
 
-                $inventory = Inventory::where('product_id', $detail->product_id)->first();
-                if (!$inventory) {
-                    $inventory = Inventory::getOrCreateForProduct($detail->product);
-                }
+                $product = $detail->product;
+                $currentStock = StockMovement::getCurrentStock($detail->product_id);
 
-                $inventory->reduceStock(
-                    quantity: $detail->quantity,
-                    type: InventoryAdjustment::TYPE_SALE,
-                    reason: "Sale invoice: {$transaction->invoice}",
-                    referenceType: 'transaction',
-                    referenceId: $transaction->id
-                );
+                // Create stock movement record
+                StockMovement::create([
+                    'product_id' => $detail->product_id,
+                    'user_id' => auth()->id(),
+                    'movement_type' => StockMovement::TYPE_SALE,
+                    'reference_type' => 'transaction',
+                    'reference_id' => $transaction->id,
+                    'quantity' => -$detail->quantity, // Negative for outgoing
+                    'unit_price' => $detail->price / $detail->quantity, // Unit price from sale
+                    'total_price' => $detail->price,
+                    'quantity_before' => $currentStock,
+                    'quantity_after' => max(0, $currentStock - $detail->quantity),
+                    'notes' => "Sale invoice: {$transaction->invoice}",
+                ]);
+
+                // Update product stock
+                $newStock = max(0, $product->stock - $detail->quantity);
+                $product->stock = $newStock;
+                $product->save();
+
+                // Update inventory
+                $inventory = Inventory::where('product_id', $detail->product_id)->first();
+                if ($inventory) {
+                    $inventory->quantity = $newStock;
+                    $inventory->save();
+                }
             }
         });
     }
@@ -92,54 +223,143 @@ class InventoryService
             foreach ($transaction->details as $detail) {
                 if (!$detail->product_id) continue;
 
-                $inventory = Inventory::where('product_id', $detail->product_id)->first();
-                if (!$inventory) continue;
+                $product = $detail->product;
+                $currentStock = StockMovement::getCurrentStock($detail->product_id);
 
-                $inventory->addStock(
-                    quantity: $detail->quantity,
-                    type: InventoryAdjustment::TYPE_RETURN,
-                    reason: "Return for invoice: {$transaction->invoice}",
-                    referenceType: 'transaction',
-                    referenceId: $transaction->id
-                );
+                // Create return movement
+                StockMovement::create([
+                    'product_id' => $detail->product_id,
+                    'user_id' => auth()->id(),
+                    'movement_type' => StockMovement::TYPE_RETURN,
+                    'reference_type' => 'transaction',
+                    'reference_id' => $transaction->id,
+                    'quantity' => $detail->quantity, // Positive for incoming
+                    'unit_price' => $detail->price / $detail->quantity,
+                    'total_price' => $detail->price,
+                    'quantity_before' => $currentStock,
+                    'quantity_after' => $currentStock + $detail->quantity,
+                    'notes' => "Return for invoice: {$transaction->invoice}",
+                ]);
+
+                // Update product stock
+                $product->increment('stock', $detail->quantity);
+
+                // Update inventory
+                $inventory = Inventory::where('product_id', $detail->product_id)->first();
+                if ($inventory) {
+                    $inventory->quantity = $currentStock + $detail->quantity;
+                    $inventory->save();
+                }
             }
         });
     }
 
+    // ==========================================
+    // MANUAL ADJUSTMENT PROCESSING
+    // ==========================================
+
     /**
-     * Manual stock adjustment
+     * Create manual stock adjustment with journal number
+     * This creates both InventoryAdjustment and StockMovement records
      */
-    public function manualAdjustment(
+    public function createAdjustment(
         Product $product,
         float $quantity,
         string $type,
         ?string $reason = null,
+        ?string $notes = null,
         ?int $userId = null
-    ): InventoryAdjustment {
-        $inventory = Inventory::getOrCreateForProduct($product);
+    ): array {
+        return DB::transaction(function () use ($product, $quantity, $type, $reason, $notes, $userId) {
+            $currentStock = StockMovement::getCurrentStock($product->id);
+            $journalNumber = InventoryAdjustment::generateJournalNumber();
 
-        if (in_array($type, [InventoryAdjustment::TYPE_IN, InventoryAdjustment::TYPE_PURCHASE, InventoryAdjustment::TYPE_RETURN])) {
-            return $inventory->addStock($quantity, $type, $reason, null, null, $userId);
-        } else {
-            return $inventory->reduceStock($quantity, $type, $reason, null, null, $userId);
-        }
+            // Determine movement type and quantity sign
+            $isIncoming = in_array($type, InventoryAdjustment::getIncomingTypes());
+            $movementType = $isIncoming ? StockMovement::TYPE_ADJUSTMENT_IN : StockMovement::TYPE_ADJUSTMENT_OUT;
+            $quantityChange = $isIncoming ? abs($quantity) : -abs($quantity);
+            $newStock = $isIncoming ? $currentStock + abs($quantity) : max(0, $currentStock - abs($quantity));
+
+            // Create inventory adjustment record (for journal)
+            $adjustment = InventoryAdjustment::create([
+                'journal_number' => $journalNumber,
+                'product_id' => $product->id,
+                'user_id' => $userId ?? auth()->id(),
+                'type' => $type,
+                'quantity_change' => $quantityChange,
+                'reason' => $reason,
+                'notes' => $notes,
+            ]);
+
+            // Create stock movement record (for ledger)
+            $stockMovement = StockMovement::create([
+                'product_id' => $product->id,
+                'user_id' => $userId ?? auth()->id(),
+                'movement_type' => $movementType,
+                'reference_type' => 'adjustment',
+                'reference_id' => $adjustment->id,
+                'quantity' => $quantityChange,
+                'unit_price' => 0, // No price for adjustment
+                'total_price' => 0,
+                'quantity_before' => $currentStock,
+                'quantity_after' => $newStock,
+                'journal_number' => $journalNumber,
+                'notes' => $reason ?? $notes,
+            ]);
+
+            // Update product stock
+            $product->stock = $newStock;
+            $product->save();
+
+            // Update inventory
+            $inventory = Inventory::getOrCreateForProduct($product);
+            $inventory->quantity = $newStock;
+            $inventory->save();
+
+            return [
+                'adjustment' => $adjustment,
+                'movement' => $stockMovement,
+            ];
+        });
     }
 
     /**
      * Stock correction (set to specific quantity)
      */
-    public function stockCorrection(Product $product, float $newQuantity, ?string $reason = null, ?int $userId = null): InventoryAdjustment
-    {
-        $inventory = Inventory::getOrCreateForProduct($product);
-        return $inventory->setStock($newQuantity, $reason, $userId);
+    public function stockCorrection(
+        Product $product,
+        float $newQuantity,
+        ?string $reason = null,
+        ?int $userId = null
+    ): array {
+        $currentStock = StockMovement::getCurrentStock($product->id);
+        $difference = $newQuantity - $currentStock;
+
+        // Tentukan tipe berdasarkan apakah menambah atau mengurangi
+        $type = $difference >= 0
+            ? InventoryAdjustment::TYPE_ADJUSTMENT_IN  // Stok naik
+            : InventoryAdjustment::TYPE_ADJUSTMENT_OUT; // Stok turun
+
+        return $this->createAdjustment(
+            $product,
+            abs($difference),
+            $type,
+            $reason ?? "Stock correction: set from {$currentStock} to {$newQuantity}",
+            null,
+            $userId
+        );
     }
+
+    // ==========================================
+    // STOCK QUERIES
+    // ==========================================
 
     /**
      * Get stock movement history for a product
      */
     public function getStockHistory(Product $product, ?string $from = null, ?string $to = null)
     {
-        $query = InventoryAdjustment::forProduct($product->id)
+        $query = StockMovement::forProduct($product->id)
             ->with('user')
             ->orderBy('created_at', 'desc');
 
@@ -153,34 +373,60 @@ class InventoryService
     /**
      * Get inventory summary
      */
-    public function getInventorySummary()
+    public function getInventorySummary(): array
     {
+        $totalStockValue = 0;
+        $totalSellValue = 0;
+
+        Product::chunk(100, function ($products) use (&$totalStockValue, &$totalSellValue) {
+            foreach ($products as $product) {
+                $stock = StockMovement::getCurrentStock($product->id);
+                $buyPrice = StockMovement::getAverageBuyPrice($product->id);
+                $totalStockValue += $stock * $buyPrice;
+                $totalSellValue += $stock * $product->sell_price;
+            }
+        });
+
         return [
             'total_products' => Product::count(),
-            'total_stock_value' => Product::sum(DB::raw('stock * buy_price')),
-            'total_sell_value' => Product::sum(DB::raw('stock * sell_price')),
+            'total_stock_value' => $totalStockValue,
+            'total_sell_value' => $totalSellValue,
             'low_stock_count' => Product::where('stock', '<=', 10)->where('stock', '>', 0)->count(),
             'out_of_stock_count' => Product::where('stock', '<=', 0)->count(),
         ];
     }
 
     /**
-     * Sync inventory with product stock
+     * Sync inventory with stock movements
      */
-    public function syncInventoryWithProducts(): int
+    public function syncInventoryFromMovements(): int
     {
         $synced = 0;
 
         Product::chunk(100, function ($products) use (&$synced) {
             foreach ($products as $product) {
+                $currentStock = StockMovement::getCurrentStock($product->id);
+
                 $inventory = Inventory::firstOrNew(['product_id' => $product->id]);
                 $inventory->barcode = $product->barcode;
-                $inventory->quantity = $product->stock;
+                $inventory->quantity = $currentStock;
                 $inventory->save();
+
+                $product->stock = $currentStock;
+                $product->save();
+
                 $synced++;
             }
         });
 
         return $synced;
+    }
+
+    /**
+     * Legacy method for backward compatibility
+     */
+    public function syncInventoryWithProducts(): int
+    {
+        return $this->syncInventoryFromMovements();
     }
 }
